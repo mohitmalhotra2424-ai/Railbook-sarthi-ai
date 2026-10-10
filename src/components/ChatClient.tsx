@@ -9,6 +9,8 @@ import {
   type KeyboardEvent,
 } from "react";
 import { TrainResultCards, type TrainCard } from "./TrainResultCards";
+import { useVoiceInput } from "./voice/useVoiceInput";
+import { useSpeak } from "./voice/useSpeak";
 
 interface ToolChip {
   correlationId: string;
@@ -102,6 +104,40 @@ export function ChatClient() {
   // near the bottom — never yank the view away from someone reading history.
   const nearBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
+  // Voice (Prompt 9): browser-native STT/TTS — tap-to-talk by default.
+  const [voiceLang, setVoiceLang] = useState<"hi-IN" | "en-IN">("hi-IN");
+  const [conversationMode, setConversationMode] = useState(false);
+  const lastAutoSpokenRef = useRef<string | null>(null);
+
+  const onTranscript = useCallback((text: string) => {
+    // Transcript lands in the composer for review/edit — NEVER auto-sent.
+    setInput((prev) => (prev.trim() ? `${prev} ${text}` : text));
+    const el = composerRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+      el.focus();
+    }
+  }, []);
+
+  const voice = useVoiceInput({ lang: voiceLang, onTranscript });
+
+  const speak = useSpeak({
+    // Conversation mode: after spoken playback ENDS, listen again. Playback
+    // always starts from a user action, so this never surprises the user.
+    onEnd: () => {
+      if (conversationMode && !busy && voice.supported) voice.start();
+    },
+  });
+
+  const onMicTap = useCallback(() => {
+    if (voice.state === "recording" || voice.state === "processing") {
+      voice.cancel();
+      return;
+    }
+    if (speak.speakingId) speak.stop(); // barge-in: stop playback promptly
+    voice.start();
+  }, [voice, speak]);
 
   useEffect(() => {
     try {
@@ -116,6 +152,16 @@ export function ChatClient() {
       logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
     }
   }, [messages]);
+
+  // Conversation mode: speak the newest assistant answer once it completes.
+  useEffect(() => {
+    if (!conversationMode || busy) return;
+    const last = [...messages].reverse().find((m) => m.role === "assistant" && m.text);
+    if (last && last.id !== lastAutoSpokenRef.current) {
+      lastAutoSpokenRef.current = last.id;
+      speak.speak(last.id, last.text!);
+    }
+  }, [conversationMode, busy, messages, speak]);
 
   const onLogScroll = useCallback(() => {
     const el = logRef.current;
@@ -370,10 +416,26 @@ export function ChatClient() {
                     <div className="rounded-3xl rounded-bl-lg border border-cream-300 bg-cream-50 px-4 py-3 text-sm leading-relaxed whitespace-pre-line text-navy-900">
                       {m.text}
                       {m.cards && m.cards.length > 0 && <TrainResultCards cards={m.cards} />}
-                      <p className="mt-2 text-[10px] text-navy-400" data-testid="answer-provenance">
-                        {m.model ? `model: ${m.model}` : "model: —"}
-                        {m.viaFallback ? " · via configured fallback" : ""}
-                      </p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <p className="text-[10px] text-navy-400" data-testid="answer-provenance">
+                          {m.model ? `model: ${m.model}` : "model: —"}
+                          {m.viaFallback ? " · via configured fallback" : ""}
+                        </p>
+                        {speak.supported && (
+                          <button
+                            type="button"
+                            data-testid="speak-button"
+                            aria-label={speak.speakingId === m.id ? "Stop speaking" : "Speak response"}
+                            onClick={() =>
+                              speak.speakingId === m.id ? speak.stop() : speak.speak(m.id, m.text ?? "")
+                            }
+                            className="rounded-full border border-navy-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-navy-700 transition hover:border-navy-400"
+                          >
+                            {speak.speakingId === m.id ? "■ Rok dein" : "🔊 Suno"}
+                          </button>
+                        )}
+                      </div>
+                      {speak.error && <p className="mt-1 text-[11px] text-alert-500">{speak.error}</p>}
                     </div>
                   )}
 
@@ -416,8 +478,74 @@ export function ChatClient() {
         </div>
       )}
 
+      {(voice.supported || speak.supported) && (
+        <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2 px-4 pb-1 text-[11px]">
+          {voice.supported && (
+            <>
+              <button
+                type="button"
+                data-testid="voice-lang"
+                aria-label="Voice input language"
+                onClick={() => setVoiceLang((l) => (l === "hi-IN" ? "en-IN" : "hi-IN"))}
+                className="rounded-full border border-cream-300 bg-white px-2.5 py-1 font-semibold text-navy-600 transition hover:border-navy-300"
+              >
+                {voiceLang === "hi-IN" ? "हिंदी" : "EN"}
+              </button>
+              {speak.supported && (
+                <button
+                  type="button"
+                  data-testid="conversation-mode"
+                  aria-pressed={conversationMode}
+                  onClick={() => setConversationMode((v) => !v)}
+                  className={`rounded-full border px-2.5 py-1 font-semibold transition ${
+                    conversationMode
+                      ? "border-signal-500/40 bg-signal-500/10 text-signal-700"
+                      : "border-cream-300 bg-white text-navy-600 hover:border-navy-300"
+                  }`}
+                >
+                  {conversationMode ? "● Conversation mode ON" : "Conversation mode"}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {(voice.state === "recording" || voice.state === "processing" || voice.message) && (
+        <p
+          data-testid="voice-status"
+          role="status"
+          className={`mx-auto max-w-2xl px-4 pb-1 text-xs font-medium ${
+            voice.state === "denied" || voice.state === "error" ? "text-alert-500" : "text-navy-600"
+          }`}
+        >
+          {voice.state === "recording" && "🎙 Sun raha hoon… boliye (tap to cancel)"}
+          {voice.state === "processing" && "…samajh raha hoon"}
+          {voice.message}
+        </p>
+      )}
+
       <form onSubmit={onSubmit} className="border-t border-cream-300 bg-cream-50 p-3 sm:p-4">
         <div className="mx-auto flex max-w-2xl items-end gap-2">
+          {voice.supported && (
+            <button
+              type="button"
+              data-testid="mic-button"
+              aria-label={
+                voice.state === "recording" || voice.state === "processing"
+                  ? "Cancel voice input"
+                  : "Start voice input"
+              }
+              disabled={busy}
+              onClick={onMicTap}
+              className={`shrink-0 rounded-full border px-3.5 py-3 text-base transition disabled:opacity-40 ${
+                voice.state === "recording" || voice.state === "processing"
+                  ? "animate-pulse border-alert-500/50 bg-alert-500/10"
+                  : "border-cream-300 bg-white hover:border-navy-400"
+              }`}
+            >
+              🎙
+            </button>
+          )}
           <textarea
             ref={composerRef}
             aria-label="Message"
