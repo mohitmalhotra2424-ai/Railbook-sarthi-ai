@@ -129,10 +129,11 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   const [confirmReset, setConfirmReset] = useState(false);
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Narrow Android screens get a shorter placeholder so it never wraps.
-  const [narrow, setNarrow] = useState(false);
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 400px)").matches,
+  );
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 400px)");
-    setNarrow(mq.matches);
     const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
@@ -491,7 +492,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                 {m.role === "user" ? (
                   <div
                     data-testid="chat-message-user"
-                    className="ml-auto w-fit rounded-2xl rounded-br-md bg-navy-900 px-4 py-2.5 text-[15px] leading-relaxed text-cream-50"
+                    className="ml-auto w-fit rounded-2xl rounded-br-md bg-navy-600 px-4 py-2.5 text-[15px] leading-relaxed text-white"
                   >
                     {m.text}
                   </div>
@@ -687,7 +688,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
               type="submit"
               disabled={busy || !input.trim()}
               aria-busy={busy}
-              className="flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-navy-900 px-4 text-sm font-semibold text-cream-50 transition hover:bg-navy-800 disabled:opacity-40 sm:w-auto"
+              className="flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-navy-600 px-4 text-sm font-semibold text-white transition hover:bg-navy-700 disabled:opacity-40 sm:w-auto"
             >
               <SendIcon className="h-4 w-4" />
               {busy ? "Sending…" : "Send"}

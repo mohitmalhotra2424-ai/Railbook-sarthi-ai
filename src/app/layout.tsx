@@ -37,7 +37,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#081f1a",
+  themeColor: "#f5f8fc",
   // Mobile keyboards resize the visual viewport so the composer stays
   // reachable instead of being covered (keyboard-aware behaviour).
   interactiveWidget: "resizes-content",
@@ -58,11 +58,11 @@ export default function RootLayout({
         <Providers>
           <a
             href="#main"
-            className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-navy-900 focus:px-4 focus:py-2 focus:text-cream-50"
+            className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-navy-600 focus:px-4 focus:py-2 focus:text-white"
           >
             Skip to content
           </a>
-          <header className="sticky top-0 z-40 bg-navy-950">
+          <header className="sticky top-0 z-40 border-b border-cream-300 bg-white/90 backdrop-blur">
             <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-4">
               <Link
                 href="/"
@@ -71,15 +71,15 @@ export default function RootLayout({
               >
                 <span
                   aria-hidden
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-saffron-500 text-navy-950"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-navy-600 text-white"
                 >
                   <BrandMark className="h-5.5 w-5.5" />
                 </span>
                 <span className="min-w-0 leading-tight">
-                  <span className="font-display block truncate text-[15px] font-semibold tracking-tight text-cream-50">
+                  <span className="font-display block truncate text-[15px] font-semibold tracking-tight text-navy-900">
                     RailSaarthi AI
                   </span>
-                  <span className="hidden truncate text-[10px] font-medium text-navy-300 min-[400px]:block">
+                  <span className="hidden truncate text-[10px] font-medium text-navy-500 min-[400px]:block">
                     रेलसारथी · your AI railway assistant
                   </span>
                 </span>
@@ -89,7 +89,7 @@ export default function RootLayout({
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`rounded-full px-3 py-2 font-medium text-navy-100 transition hover:bg-navy-800 hover:text-cream-50 ${
+                    className={`rounded-full px-3 py-2 font-medium text-navy-700 transition hover:bg-navy-50 hover:text-navy-900 ${
                       item.mobile ? "" : "hidden sm:block"
                     }`}
                   >

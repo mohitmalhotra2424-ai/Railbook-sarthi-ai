@@ -46,10 +46,10 @@ function RouteGraphic() {
       <circle cx="308" cy="40" r="4" fill="var(--color-saffron-500)" stroke="none" />
       <g transform="translate(146 8)">
         <rect x="0" y="0" width="28" height="14" rx="4" fill="var(--color-saffron-500)" stroke="none" />
-        <rect x="4" y="3" width="6" height="5" rx="1" fill="var(--color-navy-950)" stroke="none" />
-        <rect x="13" y="3" width="6" height="5" rx="1" fill="var(--color-navy-950)" stroke="none" />
-        <circle cx="7" cy="14" r="2.2" fill="var(--color-cream-50)" stroke="none" />
-        <circle cx="21" cy="14" r="2.2" fill="var(--color-cream-50)" stroke="none" />
+        <rect x="4" y="3" width="6" height="5" rx="1" fill="#ffffff" stroke="none" />
+        <rect x="13" y="3" width="6" height="5" rx="1" fill="#ffffff" stroke="none" />
+        <circle cx="7" cy="14" r="2.2" fill="var(--color-navy-600)" stroke="none" />
+        <circle cx="21" cy="14" r="2.2" fill="var(--color-navy-600)" stroke="none" />
       </g>
     </svg>
   );
@@ -59,31 +59,31 @@ export default function HomePage() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-navy-950 px-4 pt-12 pb-12 text-center sm:pt-16 sm:pb-14">
+      <section className="relative overflow-hidden bg-gradient-to-b from-navy-100 via-cream-100 to-cream-100 px-4 pt-12 pb-12 text-center sm:pt-16 sm:pb-14">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(52rem_24rem_at_50%_-6rem,rgb(207_154_51/0.16),transparent_70%)]"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(52rem_24rem_at_50%_-6rem,rgb(38_96_196/0.14),transparent_70%)]"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-saffron-500/50 to-transparent"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-navy-300/70 to-transparent"
         />
         <div className="relative mx-auto max-w-2xl">
-          <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-saffron-500/30 bg-navy-900/80 px-3.5 py-1 text-[11px] font-semibold tracking-wide text-saffron-400">
-            <BrandMark className="h-3.5 w-3.5" />
+          <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-navy-200 bg-white px-3.5 py-1 text-[11px] font-semibold tracking-wide text-navy-700 shadow-sm">
+            <BrandMark className="h-3.5 w-3.5 text-saffron-500" />
             Indian Railways · AI assistant
           </p>
-          <h1 className="font-display mt-5 text-[40px] leading-[1.08] font-semibold tracking-tight text-cream-50 sm:text-6xl">
-            Your Journey, <span className="text-saffron-400 italic">Simplified.</span>
+          <h1 className="font-display mt-5 text-[40px] leading-[1.08] font-semibold tracking-tight text-navy-900 sm:text-6xl">
+            Your Journey, <span className="text-saffron-500 italic">Simplified.</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-navy-200 sm:text-base">
+          <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-navy-600 sm:text-base">
             Ask anything about Indian Railways in Hindi, Hinglish or English —
             trains, timings, fares, seat availability, routes and PNR status.
           </p>
           <Link
             href="/chat"
             data-testid="start-chatting"
-            className="surface-shadow mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-saffron-500 px-9 text-[15px] font-bold text-navy-950 transition hover:bg-saffron-400"
+            className="surface-shadow mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-saffron-500 px-9 text-[15px] font-bold text-white transition hover:bg-saffron-600"
           >
             Start Chatting
           </Link>
@@ -102,7 +102,7 @@ export default function HomePage() {
               key={f.title}
               className="surface-shadow rounded-2xl border border-cream-300 bg-white p-3.5 transition hover:-translate-y-0.5 sm:p-4"
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-saffron-500/25 bg-saffron-500/10 text-saffron-600">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-navy-200 bg-navy-50 text-navy-600">
                 <f.icon className="h-4.5 w-4.5" />
               </span>
               <p className="mt-2.5 text-[13px] font-bold text-navy-900">{f.title}</p>
@@ -118,7 +118,7 @@ export default function HomePage() {
         <ol className="relative mt-6 grid gap-3 sm:grid-cols-3">
           <span
             aria-hidden
-            className="absolute top-4 right-[16%] left-[16%] hidden h-px bg-gradient-to-r from-saffron-500/0 via-saffron-500/40 to-saffron-500/0 sm:block"
+            className="absolute top-4 right-[16%] left-[16%] hidden h-px bg-gradient-to-r from-navy-200/0 via-navy-300 to-navy-200/0 sm:block"
           />
           {[
             { t: "Ask a question", d: "Apni bhasha mein likhein ya bolein — koi form nahi." },
@@ -126,7 +126,7 @@ export default function HomePage() {
             { t: "Explore the results", d: "Cards me timings, fare, availability — source ke saath." },
           ].map((st, i) => (
             <li key={st.t} className="relative rounded-2xl border border-cream-300 bg-cream-50 p-4">
-              <span className="font-display flex h-8 w-8 items-center justify-center rounded-full border border-saffron-500/40 bg-white text-sm font-semibold text-saffron-600">
+              <span className="font-display flex h-8 w-8 items-center justify-center rounded-full border border-navy-200 bg-white text-sm font-semibold text-navy-700 shadow-sm">
                 {i + 1}
               </span>
               <p className="mt-2.5 text-[13px] font-bold text-navy-900">{st.t}</p>

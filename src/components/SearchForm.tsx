@@ -96,7 +96,7 @@ export function SearchForm() {
           <div className="flex items-end">
             <button
               type="submit"
-              className="h-[42px] w-full rounded-xl bg-navy-900 px-4 text-sm font-semibold text-cream-50 transition hover:bg-navy-800"
+              className="h-[42px] w-full rounded-xl bg-navy-600 px-4 text-sm font-semibold text-white transition hover:bg-navy-700"
             >
               Search trains
             </button>
