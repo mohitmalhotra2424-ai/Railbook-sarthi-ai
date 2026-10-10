@@ -2,6 +2,7 @@ import { providerError, type ProviderError } from "@/domain/errors";
 import { confirmtktAdapter } from "./adapters/confirmtkt-v1";
 import { erailAdapter } from "./adapters/erail-v1";
 import { webDataAdapter } from "./adapters/web-data-v1";
+import { railyatriSeatAdapter } from "./adapters/railyatri-seat-v1";
 import { configuredProviderIds, isProviderCredentialPresent } from "./config";
 import { notConfiguredEnvelope } from "./envelope";
 import { reconcileEnvelopes } from "./reconcile";
@@ -209,3 +210,4 @@ export async function executeCapabilityFailover<T>(
 registerAdapter(confirmtktAdapter); // primary: search + availability + fare
 registerAdapter(erailAdapter); // fallback: search + fare
 registerAdapter(webDataAdapter); // timetable + liveStatus (owner-supplied web chains)
+registerAdapter(railyatriSeatAdapter); // availability fallback — inactive until owner supplies RailYatri user id

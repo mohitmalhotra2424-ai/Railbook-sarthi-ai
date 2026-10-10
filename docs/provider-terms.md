@@ -13,6 +13,8 @@ adapters with an empty `termsRef` (convention: `docs/provider-terms.md#<anchor>`
 
 | `#web-data-v1` | Community-accessible web sources (owner-directed) | Timetable: ixigo.com/trains/{n} → confirmtkt.com/train-schedule/{n} → trainspnrstatus.com/train-schedule/{n} (first with ≥3 stops wins). Live status: livestatus.railyatri.in eta JSON → railyatri.in/live-train-status (__NEXT_DATA__.ltsData) → railenquiry.in/runningstatus | none published | Timetable + live running status only | Owner's browser-header recipe (Sec-Fetch-*, en-IN, same-origin Referer), 9 s timeout, `!res.ok → next source`; caches 6 h schedule / 60 s live | None (keyless) | **Owner, explicit instruction 2026-10-10** (source chains + header recipe supplied by owner) | 2026-10-10 |
 
+| `#railyatri-seat-v1` | Unofficial web-app endpoint (owner-directed) | `https://sa.railyatri.in/api/seat/enquiry/{train}/{dd-mm-yyyy}/{src}/{dst}/{class}/GN.json` — the same endpoint railyatri.in's own seat-availability page calls (found in their JS bundle; no public docs) | none published | Seat-availability FALLBACK when confirmtkt-v1 fails | We self-limit: 60 s cache per (train,route,date,class), 12 s timeout | **Owner-supplied RailYatri user id** via `RAILWAY_PROVIDER_RAILYATRI_SEAT_V1_KEY` — adapter is INACTIVE without it (gateway rejects with "Invalid User Id.") | **Owner, explicit instruction 2026-10-10** ("Seat availability bhi scrap kro") | 2026-10-10 |
+
 ### Owner decision of 2026-10-10 (supersedes the "no source authorized" conclusion below)
 
 The owner explicitly directed scraping ConfirmTkt (primary) with RailYatri/eRail
@@ -24,14 +26,18 @@ as fallbacks. Recorded caveats, kept visible on purpose:
   never as fabricated data.
 - No login, CAPTCHA bypass or security-control evasion is involved; requests
   use the sites' own public web clients.
-- **RailYatri was investigated and NOT wired**: its former public
-  trains-between-stations pages now 404/301 (probed 2026-10-10) and its data
-  APIs are B2B-only, so eRail is the implemented fallback. UPDATE (same day,
-  owner supplied `sa.railyatri.in/api/v3/seat/availability/...`): probed live —
-  every `user_id` variant (owner's `-2345434`, `-1`, `0`, absent) returns
-  `{"success":false,"message":"Invalid User Id."}`. The endpoint needs a
-  valid RailYatri session user id which we do not have and will not guess;
-  wiring resumes the moment a working id is supplied.
+- **RailYatri**: its former public trains-between-stations pages now 404/301
+  (probed 2026-10-10) and its data APIs are B2B-only. UPDATE 2 (2026-10-10,
+  owner: "Seat availability bhi scrap kro"): the site's own seat-availability
+  page calls `sa.railyatri.in/api/seat/enquiry/…` — probed live; without a
+  genuine registered user id the gateway returns
+  `{"success":false,"message":"Invalid User Id."}` for every id variant.
+  The adapter `railyatri-seat-v1` is therefore WIRED but CREDENTIAL-GATED:
+  it activates only when the owner supplies their user id via
+  `RAILWAY_PROVIDER_RAILYATRI_SEAT_V1_KEY` and lists the id in
+  `RAILWAY_PROVIDER_IDS`. Until then: honest NOT_CONFIGURED, never mock data.
+  The response parser is fixture-tested (shape from RailYatri's JS bundle)
+  and awaits live verification once a valid id exists.
 - If either site objects or blocks us, remove its id from
   `RAILWAY_PROVIDER_IDS` — the app degrades to honest not-configured answers.
 
