@@ -97,3 +97,74 @@ export function WarnIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function SearchIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="m15 15 5.5 5.5" />
+    </svg>
+  );
+}
+
+export function ClockIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
+export function RupeeIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="M7 4h10M7 8.5h10M7 4c4.5 0 7 1.8 7 4.5S11.5 13 7 13l7 7" />
+    </svg>
+  );
+}
+
+export function SeatIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="M7 4.5h8a2 2 0 0 1 2 2V13H5V6.5a2 2 0 0 1 2-2Z" />
+      <path d="M5 13v4.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V13" />
+    </svg>
+  );
+}
+
+export function PulseIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="M3 12h4l2.5-6 4 12L16 12h5" />
+    </svg>
+  );
+}
+
+export function TicketIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="M4 7.5h16v3a1.8 1.8 0 0 0 0 3.6v3H4v-3a1.8 1.8 0 0 0 0-3.6v-3Z" />
+      <path d="M14.5 7.5v10" strokeDasharray="2 2.4" />
+    </svg>
+  );
+}
+
+export function HomeIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="m4 11 8-7 8 7" />
+      <path d="M6 9.5V20h12V9.5" />
+    </svg>
+  );
+}
+
+export function InfoIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v5" />
+      <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}

@@ -31,7 +31,23 @@ export interface TrainCard {
   to: string;
   departure: string;
   arrival: string;
+  classes?: string[];
+  journeyDate?: string;
+  /** Per-class availability only when the provider published it. */
+  availability?: { classCode: string; status: string; asOf?: string | null }[];
 }
+
+/** Structured, provider-backed blocks rendered as purpose-built cards in chat. */
+export type ResultBlock = {
+  source?: string;
+  freshness?: string;
+  retrievedAt?: string;
+} & (
+  | { kind: "availability"; data: import("@/domain/schemas").Availability }
+  | { kind: "fare"; data: import("@/domain/schemas").Fare }
+  | { kind: "live"; data: import("@/domain/schemas").LiveStatus }
+  | { kind: "pnr"; data: import("@/domain/schemas").PnrStatus }
+);
 
 export type TurnEvent =
   | { type: "status"; text: "thinking" | "using_fallback"; model?: string }
@@ -47,7 +63,7 @@ export type TurnEvent =
       journeyDate?: string;
       classCode?: string;
     }
-  | { type: "message"; text: string; model: string; viaFallback: boolean; cards: TrainCard[] }
+  | { type: "message"; text: string; model: string; viaFallback: boolean; cards: TrainCard[]; blocks: ResultBlock[] }
   | { type: "error"; code: string; message: string; retryable: boolean };
 
 export interface RunTurnParams {
@@ -92,10 +108,42 @@ function deriveCards(turnResults: ToolResult[]): TrainCard[] {
         // Only fields the provider actually returned — UI labels missing ones.
         ...(rawClasses && rawClasses.length > 0 ? { classes: rawClasses } : {}),
         ...(typeof result.journeyDate === "string" && result.journeyDate ? { journeyDate: result.journeyDate } : {}),
+        ...(Array.isArray(row.availability) && row.availability.length > 0
+          ? {
+              availability: (row.availability as { classCode: string; status: string; asOf?: string | null }[]).map(
+                (a) => ({ classCode: a.classCode, status: a.status, asOf: a.asOf ?? null }),
+              ),
+            }
+          : {}),
       });
     }
   }
   return cards;
+}
+
+const BLOCK_TOOL: Record<string, ResultBlock["kind"]> = {
+  CHECK_AVAILABILITY: "availability",
+  GET_FARE: "fare",
+  TRACK_TRAIN: "live",
+  CHECK_PNR: "pnr",
+};
+
+/** Attach structured provider data (never invented) for purpose-built cards. */
+function deriveBlocks(turnResults: ToolResult[]): ResultBlock[] {
+  const blocks: ResultBlock[] = [];
+  for (const result of turnResults) {
+    if ((result.status !== "ok" && result.status !== "stale") || !result.data) continue;
+    const kind = BLOCK_TOOL[result.tool];
+    if (!kind) continue;
+    blocks.push({
+      kind,
+      data: result.data as never,
+      ...(result.source ? { source: result.source.providerId } : {}),
+      ...(result.freshness ? { freshness: result.freshness } : {}),
+      ...(result.retrievedAt ? { retrievedAt: result.retrievedAt } : {}),
+    });
+  }
+  return blocks;
 }
 
 export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent> {
@@ -200,6 +248,7 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
         model: usedEndpoint.cfg.model,
         viaFallback: usedEndpoint.viaFallback,
         cards: deriveCards(turnResults),
+        blocks: deriveBlocks(turnResults),
       };
       return;
     }

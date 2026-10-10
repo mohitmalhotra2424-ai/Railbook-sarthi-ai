@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { availabilityKind, KIND_LABEL, KIND_PILL, stationCode } from "./results/status";
+
 export interface TrainCard {
   trainNumber: string;
   trainName: string;
@@ -9,67 +12,125 @@ export interface TrainCard {
   classes?: string[];
   /** Journey date of the search these cards came from. */
   journeyDate?: string;
+  /** Per-class availability only when the provider published it. */
+  availability?: { classCode: string; status: string; asOf?: string | null }[];
 }
 
 /** Deterministic rendering of structured tool data (UI display only —
  *  no interpretation). Data always originates from provider results.
  *  Fields the provider did not return are labelled "—", never invented. */
-export function TrainResultCards({ cards }: { cards: TrainCard[] }) {
+export function TrainResultCards({
+  cards,
+  onAsk,
+}: {
+  cards: TrainCard[];
+  /** Sends a natural-language follow-up through the existing chat turn. */
+  onAsk?: (question: string) => void;
+}) {
   if (cards.length === 0) return null;
   return (
-    <ul className="mt-3 space-y-2" data-testid="train-cards">
-      {cards.map((c) => (
-        <li
-          key={`${c.trainNumber}-${c.departure}`}
-          className="rounded-xl border border-cream-300 bg-cream-50 p-3"
-        >
-          {/* Identity row */}
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="min-w-0 truncate text-[13px] font-bold text-navy-900">
-              {c.trainNumber} · {c.trainName}
-            </p>
-            {c.journeyDate && (
-              <p className="shrink-0 text-[10px] font-semibold text-navy-500" data-testid="card-journey-date">
-                {c.journeyDate}
+    <ul className="mt-3 space-y-2.5" data-testid="train-cards">
+      {cards.map((c) => {
+        const fromCode = stationCode(c.from);
+        const toCode = stationCode(c.to);
+        return (
+          <li
+            key={`${c.trainNumber}-${c.departure}`}
+            className="rounded-2xl border border-cream-300 bg-cream-50 p-3.5"
+          >
+            {/* Identity */}
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 text-[13px] leading-snug font-bold text-navy-900">
+                {c.trainNumber} · {c.trainName}
               </p>
-            )}
-          </div>
+              {c.journeyDate && (
+                <p className="shrink-0 text-[10px] font-semibold text-navy-500" data-testid="card-journey-date">
+                  {c.journeyDate}
+                </p>
+              )}
+            </div>
 
-          {/* Journey row: times dominate, stations secondary */}
-          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-            <div className="min-w-0">
-              <p className="text-base font-bold text-navy-900 tabular-nums" data-testid="card-dep">
-                {c.departure || "—"}
-              </p>
-              <p className="truncate text-[11px] text-navy-600">{c.from}</p>
+            {/* Journey: prominent times, station names + codes, route line */}
+            <div className="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <div className="min-w-0">
+                <p className="text-lg leading-tight font-bold text-navy-900 tabular-nums" data-testid="card-dep">
+                  {c.departure || "—"}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-navy-600 [overflow-wrap:anywhere]">{c.from}</p>
+              </div>
+              <div aria-hidden className="flex flex-col items-center self-center px-0.5">
+                <span className="h-2 w-2 rounded-full border-2 border-navy-400 bg-white" />
+                <span className="my-0.5 h-0.5 w-10 rounded bg-navy-200 sm:w-16" />
+                <span className="h-2 w-2 rounded-full bg-saffron-500" />
+              </div>
+              <div className="min-w-0 text-right">
+                <p className="text-lg leading-tight font-bold text-navy-900 tabular-nums" data-testid="card-arr">
+                  {c.arrival || "—"}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-navy-600 [overflow-wrap:anywhere]">{c.to}</p>
+              </div>
             </div>
-            <div aria-hidden className="flex flex-col items-center px-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-navy-300" />
-              <span className="my-0.5 h-px w-10 bg-navy-200 sm:w-14" />
-              <span className="h-1.5 w-1.5 rounded-full bg-saffron-500" />
-            </div>
-            <div className="min-w-0 text-right">
-              <p className="text-base font-bold text-navy-900 tabular-nums" data-testid="card-arr">
-                {c.arrival || "—"}
-              </p>
-              <p className="truncate text-[11px] text-navy-600">{c.to}</p>
-            </div>
-          </div>
 
-          {c.classes && c.classes.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1" data-testid="card-classes">
-              {c.classes.map((cls) => (
-                <span
-                  key={cls}
-                  className="rounded-md bg-navy-50 px-1.5 py-0.5 text-[10px] font-semibold text-navy-700"
+            {/* Travel details: availability by class, else class list */}
+            {c.availability && c.availability.length > 0 ? (
+              <ul className="mt-2.5 space-y-1" data-testid="card-classes">
+                {c.availability.map((a) => {
+                  const kind = availabilityKind(a.status);
+                  return (
+                    <li key={a.classCode} className="flex items-center gap-2 text-[11px]">
+                      <span className="w-8 shrink-0 rounded-md bg-navy-50 px-1.5 py-0.5 text-center font-bold text-navy-700">
+                        {a.classCode}
+                      </span>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 font-semibold ${KIND_PILL[kind]}`}
+                      >
+                        {KIND_LABEL[kind]}
+                      </span>
+                      <span className="min-w-0 truncate font-medium text-navy-700">{a.status}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : c.classes && c.classes.length > 0 ? (
+              <div className="mt-2.5 flex flex-wrap gap-1" data-testid="card-classes">
+                {c.classes.map((cls) => (
+                  <span
+                    key={cls}
+                    className="rounded-md bg-navy-50 px-1.5 py-0.5 text-[10px] font-semibold text-navy-700"
+                  >
+                    {cls}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {/* Actions — view/ask only; booking stays disabled */}
+            <div className="mt-3 flex flex-wrap gap-1.5 border-t border-cream-200 pt-2.5">
+              <Link
+                href={`/trains/${c.trainNumber}`}
+                className="rounded-full border border-navy-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-navy-800 transition hover:border-navy-400"
+              >
+                View details
+              </Link>
+              {onAsk && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAsk(
+                      `${c.trainNumber} ${fromCode || c.from} se ${toCode || c.to} seat availability${
+                        c.journeyDate ? ` (${c.journeyDate})` : ""
+                      }?`,
+                    )
+                  }
+                  className="rounded-full border border-navy-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-navy-800 transition hover:border-navy-400"
                 >
-                  {cls}
-                </span>
-              ))}
+                  Check availability
+                </button>
+              )}
             </div>
-          )}
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ul>
   );
 }

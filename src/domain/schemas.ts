@@ -13,6 +13,14 @@ export const StationSchema = z.object({
 });
 export type Station = z.infer<typeof StationSchema>;
 
+export const ClassAvailabilitySchema = z.object({
+  classCode: z.string().min(1),
+  /** Exact status text as published by the provider (e.g. "AVAILABLE-12", "WL 29"). */
+  status: z.string().min(1),
+  asOf: z.string().nullable().optional(),
+});
+export type ClassAvailability = z.infer<typeof ClassAvailabilitySchema>;
+
 export const TrainSummarySchema = z.object({
   trainNumber: z
     .string()
@@ -23,6 +31,8 @@ export const TrainSummarySchema = z.object({
   departure: z.string().min(1),
   arrival: z.string().min(1),
   classes: z.array(z.string()).optional(),
+  /** Per-class availability only when the provider published it with the search. */
+  availability: z.array(ClassAvailabilitySchema).optional(),
 });
 export type TrainSummary = z.infer<typeof TrainSummarySchema>;
 

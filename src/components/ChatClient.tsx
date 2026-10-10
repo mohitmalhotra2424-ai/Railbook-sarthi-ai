@@ -10,8 +10,11 @@ import {
   type KeyboardEvent,
 } from "react";
 import { TrainResultCards, type TrainCard } from "./TrainResultCards";
+import { ResultBlocks } from "./ResultBlocks";
+import type { ResultBlock } from "@/assistant/orchestrator";
 import {
   ArrowDownIcon,
+  HomeIcon,
   MicIcon,
   PlusIcon,
   SendIcon,
@@ -19,6 +22,7 @@ import {
   StopIcon,
   WarnIcon,
 } from "./icons";
+import Link from "next/link";
 import { useVoiceInput } from "./voice/useVoiceInput";
 import { useSpeak } from "./voice/useSpeak";
 
@@ -37,6 +41,7 @@ interface ChatMsg {
   role: "user" | "assistant";
   text?: string;
   cards?: TrainCard[];
+  blocks?: ResultBlock[];
   chips?: ToolChip[];
   thinking?: boolean;
   model?: string;
@@ -57,10 +62,12 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 const SUGGESTIONS = [
-  "Amritsar se Delhi ki trains",
-  "Meri train abhi kahan hai?",
-  "Train ka fare aur timing",
-  "WL ticket ka matlab kya hai?",
+  "Ludhiana se Delhi ki trains",
+  "Kal ki trains aur timings",
+  "3A mein seat availability",
+  "Is train ka fare kitna hai?",
+  "Train abhi kahan hai?",
+  "PNR status check karna hai",
 ];
 
 function chipStyle(chip: ToolChip): string {
@@ -119,6 +126,23 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   const [voiceLang, setVoiceLang] = useState<"hi-IN" | "en-IN">("hi-IN");
   const [conversationMode, setConversationMode] = useState(false);
   const lastAutoSpokenRef = useRef<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Narrow Android screens get a shorter placeholder so it never wraps.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 400px)");
+    setNarrow(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const armConfirm = useCallback(() => {
+    setConfirmReset(true);
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    confirmTimerRef.current = setTimeout(() => setConfirmReset(false), 3000);
+  }, []);
 
   const onTranscript = useCallback((text: string) => {
     // Transcript lands in the composer for review/edit — NEVER auto-sent.
@@ -324,6 +348,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                   thinking: false,
                   text: String(ev.text ?? ""),
                   cards: (ev.cards as TrainCard[] | undefined) ?? [],
+                  blocks: (ev.blocks as ResultBlock[] | undefined) ?? [],
                   model: String(ev.model ?? ""),
                   viaFallback: Boolean(ev.viaFallback),
                 });
@@ -384,6 +409,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
       /* ignore */
     }
     setMessages([]);
+    setConfirmReset(false);
     setShowJump(false);
     nearBottomRef.current = true;
     composerRef.current?.focus();
@@ -404,21 +430,34 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
           onScroll={onLogScroll}
           className="h-full space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
         >
-          {/* Compact context row */}
+          {/* Compact chat header: identity + home + reset */}
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold tracking-wide text-navy-500 uppercase">
-              Assistant · सहायक
-            </p>
+            <div className="flex min-w-0 items-center gap-2">
+              <Link
+                href="/"
+                aria-label="Back to home"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cream-300 bg-white text-navy-700 transition hover:border-navy-300"
+              >
+                <HomeIcon className="h-4 w-4" />
+              </Link>
+              <p className="truncate text-xs font-bold tracking-wide text-navy-700 uppercase">
+                Railway Assistant
+              </p>
+            </div>
             <button
               type="button"
               data-testid="new-chat"
               aria-label="Start a new conversation"
-              onClick={newConversation}
+              onClick={() => (confirmReset ? (setConfirmReset(false), newConversation()) : armConfirm())}
               disabled={messages.length === 0}
-              className="flex items-center gap-1 rounded-full border border-cream-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-navy-700 transition hover:border-navy-300 disabled:opacity-40"
+              className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition disabled:opacity-40 ${
+                confirmReset
+                  ? "border-alert-500/40 bg-alert-500/10 text-alert-500"
+                  : "border-cream-300 bg-white text-navy-700 hover:border-navy-300"
+              }`}
             >
               <PlusIcon className="h-3.5 w-3.5" />
-              New
+              {confirmReset ? "Confirm new chat?" : "New chat"}
             </button>
           </div>
 
@@ -480,7 +519,10 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                     {m.text && (
                       <div className="rounded-2xl rounded-bl-md border border-cream-300 bg-white p-4">
                         <p className="text-[15px] leading-relaxed whitespace-pre-line text-navy-900">{m.text}</p>
-                        {m.cards && m.cards.length > 0 && <TrainResultCards cards={m.cards} />}
+                        {m.cards && m.cards.length > 0 && (
+                          <TrainResultCards cards={m.cards} onAsk={(q) => void send(q)} />
+                        )}
+                        {m.blocks && m.blocks.length > 0 && <ResultBlocks blocks={m.blocks} />}
                         <div className="mt-3 flex items-center justify-between gap-2 border-t border-cream-200 pt-2.5">
                           <p className="text-[10px] text-navy-400" data-testid="answer-provenance">
                             {m.model ? `model: ${m.model}` : "model: —"}
@@ -637,7 +679,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                 growComposer();
               }}
               onKeyDown={onComposerKeyDown}
-              placeholder="Train, PNR, live status… likhiye"
+              placeholder={narrow ? "Ask about trains, timings, fares…" : "Ask about trains, timings, fares, availability…"}
               className="max-h-32 min-w-0 flex-1 resize-none rounded-xl border border-cream-300 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-navy-900 placeholder:text-navy-400 focus:border-navy-400 focus:outline-none"
             />
             </div>

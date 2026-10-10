@@ -1,41 +1,57 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Prompt 11 — the redesigned home IS the assistant entry: brand, honest
- * promise, a working composer and starter suggestions, all at 360px.
+ * Prompt 12 — the homepage explains the product in seconds and routes users
+ * into the single chat experience (no duplicated inputs on home).
  */
-test("landing renders brand, honesty promise and a usable composer at 360px", async ({ page }) => {
+test("homepage explains the product, offers one CTA and honesty promises at 360px", async ({
+  page,
+}) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("रेलसारथी");
-  // honesty promises remain visible on the first screen
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Your Journey, Simplified.");
+  await expect(
+    page.getByText("Ask anything about Indian Railways in Hindi, Hinglish or English"),
+  ).toBeVisible();
+
+  // one prominent CTA into chat
+  const cta = page.getByTestId("start-chatting");
+  await expect(cta).toBeVisible();
+  await expect(cta).toBeInViewport();
+  const box = await cta.boundingBox();
+  expect(box && box.height).toBeGreaterThanOrEqual(44);
+
+  // the six capability features are named plainly
+  for (const f of [
+    "Find Trains",
+    "Timings & Routes",
+    "Fare & Classes",
+    "Seat Availability",
+    "Live Train Status",
+    "PNR Status",
+  ]) {
+    await expect(page.getByText(f, { exact: true })).toBeVisible();
+  }
+
+  // honesty promises remain visible
   await expect(page.getByText("Source on every answer")).toBeVisible();
   await expect(page.getByText("No invented data")).toBeVisible();
 
-  // the composer is the primary element: visible, in viewport, usable
-  const composer = page.getByLabel("Ask RailSaarthi");
-  await expect(composer).toBeVisible();
-  await expect(composer).toBeInViewport();
-  const send = page.getByRole("button", { name: /Poochhein/ });
-  await expect(send).toBeVisible();
-  const box = await send.boundingBox();
-  expect(box && box.height).toBeGreaterThanOrEqual(40);
-
-  // suggestions are real entry points into the existing chat architecture
-  const suggestions = page.getByTestId("suggestion");
-  await expect(suggestions).toHaveCount(4);
-  await suggestions.first().click();
-  await page.waitForURL(/\/chat\?q=/);
-  // the handoff performs a REAL turn (honest error without LLM creds here)
-  await expect(page.getByTestId("chat-message-user")).toBeVisible({ timeout: 15_000 });
+  // no duplicated chat input on the homepage
+  await expect(page.getByLabel("Message")).toHaveCount(0);
+  await expect(page.getByLabel("Ask RailSaarthi")).toHaveCount(0);
 });
 
-test("home composer submits the typed question to the chat", async ({ page }) => {
+test("CTA opens chat; example questions start a real chat turn", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("Ask RailSaarthi").fill("Amritsar se Delhi ki trains");
-  await page.getByRole("button", { name: /Poochhein/ }).click();
-  // ?q= is cleaned after the handoff
+  await page.getByTestId("start-chatting").click();
+  await expect(page).toHaveURL(/\/chat$/);
+  await expect(page.getByLabel("Message")).toBeVisible();
+
+  await page.goto("/");
+  await page.getByTestId("suggestion").first().click();
   await page.waitForURL((url) => url.pathname === "/chat" && url.search === "");
-  await expect(page.getByTestId("chat-message-user")).toContainText("Amritsar se Delhi ki trains", {
+  // the handoff performs a REAL turn through the existing architecture
+  await expect(page.getByTestId("chat-message-user")).toContainText("Ludhiana se Delhi ki trains", {
     timeout: 15_000,
   });
 });

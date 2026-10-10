@@ -254,7 +254,20 @@ function toTrainSummary(row: Record<string, unknown>): TrainSummary | null {
     departure: String(row.departureTime ?? "").trim(),
     arrival: String(row.arrivalTime ?? "").trim(),
     classes: availabilityClasses(row.availabilityCache).map((c) => c.classCode),
+    availability: availabilityClasses(row.availabilityCache)
+      .map((c) => {
+        const raw = typeof c.entry.availability === "string" ? c.entry.availability.trim() : "";
+        const display =
+          typeof c.entry.availabilityDisplayName === "string" && c.entry.availabilityDisplayName.trim()
+            ? c.entry.availabilityDisplayName.trim()
+            : raw;
+        const asOf =
+          typeof c.entry.cacheTime === "string" && c.entry.cacheTime.trim() ? c.entry.cacheTime.trim() : null;
+        return { classCode: c.classCode, status: display, asOf };
+      })
+      .filter((a) => a.status.length > 0),
   };
+  if (candidate.availability.length === 0) delete (candidate as { availability?: unknown }).availability;
   const parsed = TrainSummarySchema.safeParse(candidate);
   return parsed.success ? parsed.data : null;
 }
