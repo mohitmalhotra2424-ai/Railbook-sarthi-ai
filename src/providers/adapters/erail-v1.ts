@@ -37,9 +37,6 @@ import type {
 const TBS_URL = "https://erail.in/rail/getTrains.aspx";
 const FARE_URL = "https://erail.in/train-fare";
 const STATIONS_URL = "https://erail.in/js/cmp/stations.js";
-const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-  "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 const SOURCE: SourceInfo = {
   providerId: "erail-v1",
@@ -93,7 +90,18 @@ function err<T>(requestId: string, error: ProviderError): ResultEnvelope<T> {
 
 async function fetchText(url: string): Promise<{ ok: boolean; status: number; body: string }> {
   const res = await fetch(url, {
-    headers: { "User-Agent": UA, Accept: "text/plain,text/html,*/*", Referer: "https://erail.in/" },
+    headers: {
+      // Owner's browser-header recipe (2026-10-10) — reduces SSR blocking.
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,*/*",
+      "Accept-Language": "en-IN,en;q=0.9,hi;q=0.8",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-User": "?1",
+      "Upgrade-Insecure-Requests": "1",
+      Referer: "https://erail.in/",
+    },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   return { ok: res.ok, status: res.status, body: await res.text() };

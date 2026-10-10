@@ -66,11 +66,14 @@ are authorized to use. All variables are server-side only:
   (owner-authorized 2026-10-10, see `docs/provider-terms.md`):
   - `confirmtkt-v1` — PRIMARY: train search, seat availability, fares,
     station lookup. Keyless public endpoint — no `*_KEY` var needed.
-  - `erail-v1` — train-search FALLBACK, tried only when the primary fails.
-    Keyless.
+  - `erail-v1` — train-search + fare FALLBACK, tried only when the primary
+    fails. Keyless.
+  - `web-data-v1` — timetable + live running status via the owner-supplied
+    web source chains (ixigo→confirmtkt→trainspnrstatus; RailYatri eta JSON
+    → RailYatri page → railenquiry). Keyless.
   Other adapters need `RAILWAY_PROVIDER_<ID_UPPER_SNAKE>_KEY` **and** a
   record in `docs/provider-terms.md` before they can register.
-  Recommended: `RAILWAY_PROVIDER_IDS=confirmtkt-v1,erail-v1`.
+  Recommended: `RAILWAY_PROVIDER_IDS=confirmtkt-v1,erail-v1,web-data-v1`.
 - `BOOKING_ENABLED` — leave unset; booking is disabled until an authorized
   integration exists.
 
