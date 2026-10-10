@@ -348,7 +348,15 @@ Prompt-2 architecture** (LLM-first) and verified again in the Prompt-3 audit:
   conversational interpreter and tool orchestrator; `intents.ts`,
   `grounding.ts` and `respond.ts` no longer exist (enforced by structure
   tests in `tests/unit/orchestrator.test.ts`).
-- **Railway sources:** ConfirmTkt, eRail, RailYatri, Trainman and
-  IRCTC live-pull are **scrapped for automated access** (owner decision,
-  Prompt 3). The registry ships zero adapters; live lookups return the
-  honest `not_configured` state. See `docs/provider-terms.md`.
+- **Railway sources:** ~~ConfirmTkt, eRail, RailYatri, Trainman and
+  IRCTC live-pull are scrapped for automated access (owner decision,
+  Prompt 3).~~ **Superseded the same day (2026-10-10) by a newer explicit
+  owner instruction:** scrape **ConfirmTkt** (seat availability, station
+  lookup, fare + search) as the primary live source, with **RailYatri/eRail**
+  as fallback. Implemented as `confirmtkt-v1` (primary) and `erail-v1`
+  (search-only fallback; RailYatri's public pages 404 and its APIs are
+  B2B-only, so it was not wired). Trainman and IRCTC live-pull remain
+  scrapped. Full caveats and the owner-decision record:
+  `docs/provider-terms.md`. Live lookups now return real data; unconfigured
+  capabilities (PNR, live status, timetable, cancellations) still return the
+  honest `not_configured` state.

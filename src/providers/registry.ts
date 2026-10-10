@@ -1,4 +1,6 @@
-import { providerError } from "@/domain/errors";
+import { providerError, type ProviderError } from "@/domain/errors";
+import { confirmtktAdapter } from "./adapters/confirmtkt-v1";
+import { erailAdapter } from "./adapters/erail-v1";
 import { configuredProviderIds, isProviderCredentialPresent } from "./config";
 import { notConfiguredEnvelope } from "./envelope";
 import { reconcileEnvelopes } from "./reconcile";
@@ -57,7 +59,7 @@ export function resolveProviders(capability: Capability): RailwayProvider[] {
     (a) =>
       a.capabilities.includes(capability) &&
       ids.has(a.id) &&
-      isProviderCredentialPresent(a.id),
+      (a.credentialRequired === false || isProviderCredentialPresent(a.id)),
   );
 }
 
@@ -116,3 +118,69 @@ export async function executeCapability<T>(
 
   return reconcileEnvelopes(capability, envelopes, requestId);
 }
+
+/**
+ * Failover execution ("if not available, try the next source").
+ *
+ * Providers run in `priority` order (lower first). The first provider that
+ * returns usable data wins; providers after it are NOT called — this keeps
+ * traffic to unofficial endpoints minimal. Failures of earlier providers are
+ * preserved in the winning envelope's `errors` for transparency, and when
+ * every provider fails the honest merged error envelope is returned.
+ * There is no mock or fabricated-data path.
+ */
+export async function executeCapabilityFailover<T>(
+  capability: Capability,
+  invoke: (provider: RailwayProvider) => Promise<ResultEnvelope<T | null>>,
+  requestId: string,
+): Promise<ResultEnvelope<T | null>> {
+  const providers = [...resolveProviders(capability)].sort(
+    (a, b) => (a.priority ?? 100) - (b.priority ?? 100),
+  );
+  if (providers.length === 0) return notConfiguredEnvelope(capability, requestId);
+
+  const failures: ProviderError[] = [];
+  for (const provider of providers) {
+    let env: ResultEnvelope<T | null>;
+    try {
+      env = await invoke(provider);
+    } catch (reason) {
+      failures.push(
+        providerError(
+          "UPSTREAM_ERROR",
+          reason instanceof Error
+            ? `Provider "${provider.id}" failed: ${reason.message}`
+            : `Provider "${provider.id}" failed.`,
+          { retryable: true },
+        ),
+      );
+      continue;
+    }
+    if (env.data !== null && env.data !== undefined) {
+      return failures.length > 0 ? { ...env, errors: [...failures, ...env.errors] } : env;
+    }
+    failures.push(...env.errors);
+  }
+
+  // Every configured provider failed — return the honest merged failure.
+  return {
+    data: null,
+    source: {
+      providerId: providers[providers.length - 1].id,
+      kind: "authorized-partner",
+      termsRef: providers[providers.length - 1].termsRef,
+      authorization: "configured",
+    },
+    retrievedAt: new Date().toISOString(),
+    freshness: "unknown",
+    ttlSeconds: 0,
+    errors: failures,
+    confidence: "low",
+    requestId,
+  };
+}
+
+/* ---------------- built-in adapters (owner-authorized 2026-10-10) ---------------- */
+
+registerAdapter(confirmtktAdapter); // primary: search + availability + fare
+registerAdapter(erailAdapter); // fallback: search only

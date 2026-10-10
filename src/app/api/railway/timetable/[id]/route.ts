@@ -1,7 +1,7 @@
 import { TimetableSchema } from "@/domain/schemas";
 import { badRequest, jsonResponse, makeRequestId } from "@/lib/http";
 import { parseLocale } from "@/lib/i18n";
-import { executeCapability } from "@/providers/registry";
+import { executeCapabilityFailover } from "@/providers/registry";
 import type { TimetableProvider } from "@/providers/types";
 
 /** GET /api/railway/timetable/:id?date=YYYY-MM-DD */
@@ -22,7 +22,7 @@ export async function GET(
   const requestId = makeRequestId();
   const locale = parseLocale(url.searchParams.get("locale"));
 
-  const envelope = await executeCapability(
+  const envelope = await executeCapabilityFailover(
     "timetable",
     async (provider) => {
       const env = await (provider as TimetableProvider).timetable(trainId, date, {

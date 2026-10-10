@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { logger } from "@/lib/logger";
 import { isNotConfigured } from "@/providers/envelope";
-import { executeCapability } from "@/providers/registry";
+import { executeCapabilityFailover } from "@/providers/registry";
 import type {
   CancellationsProvider,
   FareProvider,
@@ -160,7 +160,7 @@ export async function executeTool(
       case "SEARCH_TRAINS": {
         const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.SEARCH_TRAINS>;
         const env = await withTimeout(
-          executeCapability("trainSearch", (p) => (p as TrainSearchProvider).search(a, ctx), requestId),
+          executeCapabilityFailover("trainSearch", (p) => (p as TrainSearchProvider).search(a, ctx), requestId),
           TOOL_TIMEOUT_MS,
           meta.signal,
         );
@@ -169,7 +169,7 @@ export async function executeTool(
       case "GET_TRAIN_INFO": {
         const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.GET_TRAIN_INFO>;
         const env = await withTimeout(
-          executeCapability("trainDetails", (p) => (p as TrainDetailsProvider).details(a.trainNumber, ctx), requestId),
+          executeCapabilityFailover("trainDetails", (p) => (p as TrainDetailsProvider).details(a.trainNumber, ctx), requestId),
           TOOL_TIMEOUT_MS,
           meta.signal,
         );
@@ -178,7 +178,7 @@ export async function executeTool(
       case "GET_TIMETABLE": {
         const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.GET_TIMETABLE>;
         const env = await withTimeout(
-          executeCapability("timetable", (p) => (p as TimetableProvider).timetable(a.trainNumber, a.date, ctx), requestId),
+          executeCapabilityFailover("timetable", (p) => (p as TimetableProvider).timetable(a.trainNumber, a.date, ctx), requestId),
           TOOL_TIMEOUT_MS,
           meta.signal,
         );
@@ -187,7 +187,7 @@ export async function executeTool(
       case "TRACK_TRAIN": {
         const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.TRACK_TRAIN>;
         const env = await withTimeout(
-          executeCapability("liveStatus", (p) => (p as LiveStatusProvider).liveStatus(a.trainNumber, a.date, ctx), requestId),
+          executeCapabilityFailover("liveStatus", (p) => (p as LiveStatusProvider).liveStatus(a.trainNumber, a.date, ctx), requestId),
           TOOL_TIMEOUT_MS,
           meta.signal,
         );
@@ -196,7 +196,7 @@ export async function executeTool(
       case "CHECK_AVAILABILITY": {
         const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.CHECK_AVAILABILITY>;
         const env = await withTimeout(
-          executeCapability(
+          executeCapabilityFailover(
             "seatAvailability",
             (p) =>
               (p as SeatAvailabilityProvider).availability(
@@ -213,11 +213,11 @@ export async function executeTool(
       case "GET_FARE": {
         const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.GET_FARE>;
         const env = await withTimeout(
-          executeCapability(
+          executeCapabilityFailover(
             "fare",
             (p) =>
               (p as FareProvider).fare(
-                { trainId: a.trainNumber, from: a.from, to: a.to, classCode: a.classCode, quota: a.quota },
+                { trainId: a.trainNumber, from: a.from, to: a.to, classCode: a.classCode, quota: a.quota, date: a.date },
                 ctx,
               ),
             requestId,
@@ -230,7 +230,7 @@ export async function executeTool(
       case "CHECK_PNR": {
         const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.CHECK_PNR>;
         const env = await withTimeout(
-          executeCapability("pnr", (p) => (p as PnrProvider).pnr(a.pnr, ctx), requestId),
+          executeCapabilityFailover("pnr", (p) => (p as PnrProvider).pnr(a.pnr, ctx), requestId),
           TOOL_TIMEOUT_MS,
           meta.signal,
         );
@@ -239,7 +239,7 @@ export async function executeTool(
       case "GET_CANCELLED_TRAINS": {
         const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.GET_CANCELLED_TRAINS>;
         const env = await withTimeout(
-          executeCapability("cancellations", (p) => (p as CancellationsProvider).cancellations(a, ctx), requestId),
+          executeCapabilityFailover("cancellations", (p) => (p as CancellationsProvider).cancellations(a, ctx), requestId),
           TOOL_TIMEOUT_MS,
           meta.signal,
         );

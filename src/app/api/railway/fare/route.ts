@@ -1,7 +1,7 @@
 import { FareSchema } from "@/domain/schemas";
 import { badRequest, jsonResponse, makeRequestId } from "@/lib/http";
 import { parseLocale } from "@/lib/i18n";
-import { executeCapability } from "@/providers/registry";
+import { executeCapabilityFailover } from "@/providers/registry";
 import type { FareProvider } from "@/providers/types";
 
 /** GET /api/railway/fare?trainId=&from=&to=&classCode=&quota= */
@@ -21,7 +21,7 @@ export async function GET(request: Request): Promise<Response> {
   const requestId = makeRequestId();
   const locale = parseLocale(url.searchParams.get("locale"));
 
-  const envelope = await executeCapability(
+  const envelope = await executeCapabilityFailover(
     "fare",
     async (provider) => {
       const env = await (provider as FareProvider).fare(query, { locale, requestId });

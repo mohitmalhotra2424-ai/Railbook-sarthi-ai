@@ -5,7 +5,8 @@ export type ProviderErrorCode =
   | "TIMEOUT"
   | "VALIDATION_FAILED"
   | "UNAUTHORIZED_SOURCE"
-  | "BOOKING_DISABLED";
+  | "BOOKING_DISABLED"
+  | "NOT_FOUND";
 
 export interface ProviderError {
   code: ProviderErrorCode;

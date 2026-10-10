@@ -1,7 +1,7 @@
 import { TrainDetailsSchema } from "@/domain/schemas";
 import { badRequest, jsonResponse, makeRequestId } from "@/lib/http";
 import { parseLocale } from "@/lib/i18n";
-import { executeCapability } from "@/providers/registry";
+import { executeCapabilityFailover } from "@/providers/registry";
 import type { TrainDetailsProvider } from "@/providers/types";
 
 /** GET /api/railway/train/:id */
@@ -17,7 +17,7 @@ export async function GET(
   const requestId = makeRequestId();
   const locale = parseLocale(new URL(request.url).searchParams.get("locale"));
 
-  const envelope = await executeCapability(
+  const envelope = await executeCapabilityFailover(
     "trainDetails",
     async (provider) => {
       const env = await (provider as TrainDetailsProvider).details(trainId, { locale, requestId });

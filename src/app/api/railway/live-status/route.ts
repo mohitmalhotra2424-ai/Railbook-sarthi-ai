@@ -1,7 +1,7 @@
 import { LiveStatusSchema } from "@/domain/schemas";
 import { badRequest, jsonResponse, makeRequestId } from "@/lib/http";
 import { parseLocale } from "@/lib/i18n";
-import { executeCapability } from "@/providers/registry";
+import { executeCapabilityFailover } from "@/providers/registry";
 import type { LiveStatusProvider } from "@/providers/types";
 
 /** GET /api/railway/live-status?trainId=&date=YYYY-MM-DD */
@@ -15,7 +15,7 @@ export async function GET(request: Request): Promise<Response> {
   const requestId = makeRequestId();
   const locale = parseLocale(url.searchParams.get("locale"));
 
-  const envelope = await executeCapability(
+  const envelope = await executeCapabilityFailover(
     "liveStatus",
     async (provider) => {
       const env = await (provider as LiveStatusProvider).liveStatus(trainId, date, {

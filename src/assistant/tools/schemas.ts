@@ -72,6 +72,11 @@ export const GetFareArgs = z.object({
   to: z.string().min(1).describe("Destination station name or code"),
   classCode: z.string().min(1).describe("Class such as 'SL', '3A', '2A', '1A', 'CC'"),
   quota: z.string().min(1).optional().describe("Quota such as 'GN' (general) or 'TQ' (tatkal). Optional."),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD")
+    .optional()
+    .describe(`${DATE_DESCRIPTION} Optional — fares on some trains vary by date.`),
 });
 
 export const CheckPnrArgs = z.object({
@@ -197,6 +202,7 @@ export const TOOL_DEFINITIONS: ChatToolDef[] = [
           to: str("Destination station name or code"),
           classCode: str("Class: 'SL','3A','2A','1A','CC',…"),
           quota: str("Optional quota: 'GN','TQ',…"),
+          date: str(`${DATE_DESCRIPTION} Optional — pass the journey date when known; fares on some trains vary by date.`),
         },
         required: ["trainNumber", "from", "to", "classCode"],
       },

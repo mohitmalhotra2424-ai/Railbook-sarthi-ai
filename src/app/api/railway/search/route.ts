@@ -1,6 +1,6 @@
 import { badRequest, jsonResponse, makeRequestId } from "@/lib/http";
 import { parseLocale } from "@/lib/i18n";
-import { executeCapability } from "@/providers/registry";
+import { executeCapabilityFailover } from "@/providers/registry";
 import type { TrainSearchProvider } from "@/providers/types";
 import { TrainSummarySchema } from "@/domain/schemas";
 import { z } from "zod";
@@ -25,7 +25,7 @@ export async function GET(request: Request): Promise<Response> {
     return badRequest("'date' must be YYYY-MM-DD.");
   }
 
-  const envelope = await executeCapability(
+  const envelope = await executeCapabilityFailover(
     "trainSearch",
     async (provider) => {
       const env = await (provider as TrainSearchProvider).search(query, { locale, requestId });

@@ -104,6 +104,14 @@ export interface RailwayProvider {
   readonly capabilities: readonly Capability[];
   /** Non-empty terms record reference — registration is rejected without it. */
   readonly termsRef: string;
+  /**
+   * False for keyless public endpoints (owner-authorized scraping sources
+   * like confirmtkt-v1): activation is by RAILWAY_PROVIDER_IDS alone.
+   * Defaults to true — credentials required.
+   */
+  readonly credentialRequired?: boolean;
+  /** Failover order — lower runs first (default 100). */
+  readonly priority?: number;
   health(): Promise<ProviderHealth>;
 }
 
@@ -161,6 +169,8 @@ export interface FareQuery {
   to: string;
   classCode: string;
   quota?: string;
+  /** ISO date — availability-linked fares (dynamic pricing) are date-specific. */
+  date?: string;
 }
 
 export interface FareProvider extends RailwayProvider {

@@ -8,7 +8,26 @@ adapters with an empty `termsRef` (convention: `docs/provider-terms.md#<anchor>`
 
 | Anchor / Provider id | Kind | API & docs URL | Terms URL | Permitted use (summary) | Rate limits | Credential via | Authorized by | Date |
 |---|---|---|---|---|---|---|---|---|
-| _(none — no source is authorized yet; live mode reports not-configured)_ | | | | | | | | |
+| `#confirmtkt-v1` | Unofficial web-app endpoints (owner-directed) | `https://cttrainsapi.confirmtkt.com/api/v1/trains/search` + `/api/v2/trains/stations/auto-suggestion` (no public docs; contract reverse-documented by github.com/uditya-kumar/confirmtkt-mcp) | none published | Train search, seat availability, fares, station lookup — display in this app | None published; we self-limit: 60 s search cache, 24 h station cache, 15 s timeout | None (keyless; `clientid`/`apikey` are static public constants from ConfirmTkt's own JS bundle, not per-user secrets) | **Owner, explicit instruction 2026-10-10** ("scrape confirmtkt for seat availability, station lookup, fare") | 2026-10-10 |
+| `#erail-v1` | Unofficial site data endpoint (owner-directed fallback) | `https://erail.in/rail/getTrains.aspx` (tab-separated; no public docs) | none published | Train-search FALLBACK only, used when confirmtkt-v1 fails | Throttles datacenter IPs ("Please try again after some time"); we self-limit: 1 h cache; throttle → honest RATE_LIMITED | None (keyless) | **Owner, explicit instruction 2026-10-10** ("if not available then scrape data from railyatri or erail") | 2026-10-10 |
+
+### Owner decision of 2026-10-10 (supersedes the "no source authorized" conclusion below)
+
+The owner explicitly directed scraping ConfirmTkt (primary) with RailYatri/eRail
+as fallbacks. Recorded caveats, kept visible on purpose:
+
+- These endpoints are **unofficial and undocumented**; they may change, throttle
+  or block access at any time. Every failure surfaces as an honest error
+  (`UPSTREAM_ERROR` / `RATE_LIMITED` / `NOT_FOUND` / `VALIDATION_FAILED`) —
+  never as fabricated data.
+- No login, CAPTCHA bypass or security-control evasion is involved; requests
+  use the sites' own public web clients.
+- **RailYatri was investigated and NOT wired**: its former public
+  trains-between-stations pages now 404/301 (probed 2026-10-10) and its data
+  APIs are B2B-only, so eRail is the implemented fallback. RailYatri can be
+  added later if a partner key is obtained.
+- If either site objects or blocks us, remove its id from
+  `RAILWAY_PROVIDER_IDS` — the app degrades to honest not-configured answers.
 
 ## Source research — 2026-10-10 (research only, no automated access performed)
 

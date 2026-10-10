@@ -1,7 +1,7 @@
 import { AvailabilitySchema } from "@/domain/schemas";
 import { badRequest, jsonResponse, makeRequestId } from "@/lib/http";
 import { parseLocale } from "@/lib/i18n";
-import { executeCapability } from "@/providers/registry";
+import { executeCapabilityFailover } from "@/providers/registry";
 import type { SeatAvailabilityProvider } from "@/providers/types";
 
 /** GET /api/railway/availability?trainId=&date=&from=&to=&classCode= */
@@ -21,7 +21,7 @@ export async function GET(request: Request): Promise<Response> {
   const requestId = makeRequestId();
   const locale = parseLocale(url.searchParams.get("locale"));
 
-  const envelope = await executeCapability(
+  const envelope = await executeCapabilityFailover(
     "seatAvailability",
     async (provider) => {
       const env = await (provider as SeatAvailabilityProvider).availability(query, {

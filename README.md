@@ -26,7 +26,7 @@ mock model anywhere.
 | 2 | Hindi/Hinglish/English assistant | LLM mirrors the user's language naturally (system prompt); verified live with Hinglish/Hindi turns |
 | 3 | Replaceable provider layer | `src/providers/*` — adapters are plugins behind capability interfaces |
 | 4 | 8 capability interfaces | search, details, timetable, live status, availability, fare, PNR, cancellations (`src/providers/types.ts`) |
-| 5 | No mock data in live mode | Zero adapters ship in Phase 1; fixtures live only under `tests/`; canonical `NOT_CONFIGURED` envelope everywhere |
+| 5 | No mock data in live mode | Fixtures live only under `tests/`; adapters return real data or honest errors; canonical `NOT_CONFIGURED` envelope for unconfigured capabilities |
 | 6 | Source/timestamp/freshness/errors on every result | `ResultEnvelope` + `SourceBadge`/`FreshnessPill` in the UI |
 | 7 | Never invent facts; show contradictions | `data: T | null` typing, Zod gates, `assistant/grounding.ts`, `providers/reconcile.ts` |
 | 8 | Server-side LLM config, no key exposure | env-only server modules, ESLint `no-restricted-properties` ban, redacting logger, client-bundle secret scan test |
@@ -62,9 +62,15 @@ are authorized to use. All variables are server-side only:
   `LLM_TIMEOUT_MS`) — any OpenAI-compatible endpoint.
 - `LLM_FALLBACK_*` — optional fallback; used only when configured, and every
   switch is surfaced to the user (never silent, never mock).
-- `RAILWAY_PROVIDER_IDS` — comma-separated adapter ids; each needs
-  `RAILWAY_PROVIDER_<ID_UPPER_SNAKE>_KEY` **and** a record in
-  `docs/provider-terms.md` before it can register.
+- `RAILWAY_PROVIDER_IDS` — comma-separated adapter ids. Built-in adapters
+  (owner-authorized 2026-10-10, see `docs/provider-terms.md`):
+  - `confirmtkt-v1` — PRIMARY: train search, seat availability, fares,
+    station lookup. Keyless public endpoint — no `*_KEY` var needed.
+  - `erail-v1` — train-search FALLBACK, tried only when the primary fails.
+    Keyless.
+  Other adapters need `RAILWAY_PROVIDER_<ID_UPPER_SNAKE>_KEY` **and** a
+  record in `docs/provider-terms.md` before they can register.
+  Recommended: `RAILWAY_PROVIDER_IDS=confirmtkt-v1,erail-v1`.
 - `BOOKING_ENABLED` — leave unset; booking is disabled until an authorized
   integration exists.
 
