@@ -27,6 +27,15 @@ export default defineConfig({
         hasTouch: true,
       },
     },
+    {
+      name: "desktop-1280",
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1280, height: 900 },
+        isMobile: false,
+        hasTouch: false,
+      },
+    },
   ],
   webServer: {
     // E2E must be deterministic: LLM credentials from .env.local are cleared

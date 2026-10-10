@@ -30,6 +30,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#0e1c3a",
+  // Mobile keyboards resize the visual viewport so the composer stays
+  // reachable instead of being covered (keyboard-aware behaviour).
+  interactiveWidget: "resizes-content",
 };
 
 const NAV = [

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import { TrainResultCards, type TrainCard } from "./TrainResultCards";
 
 interface ToolChip {
@@ -90,6 +97,11 @@ export function ChatClient() {
   const conversationIdRef = useRef<string | null>(null);
   const lastUserMessageRef = useRef<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  // Smart auto-scroll: only follow the conversation when the user is already
+  // near the bottom — never yank the view away from someone reading history.
+  const nearBottomRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
 
   useEffect(() => {
     try {
@@ -100,8 +112,37 @@ export function ChatClient() {
   }, []);
 
   useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
+    if (nearBottomRef.current) {
+      logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
+    }
   }, [messages]);
+
+  const onLogScroll = useCallback(() => {
+    const el = logRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    nearBottomRef.current = nearBottom;
+    setShowJump(!nearBottom);
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
+    nearBottomRef.current = true;
+    setShowJump(false);
+  }, []);
+
+  const growComposer = useCallback(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`; // ≈5 lines max
+  }, []);
+
+  /** On failure, give the user's text back if they haven't typed something new. */
+  const restoreTextOnFailure = useCallback((text: string) => {
+    setInput((prev) => (prev.trim() === "" ? text : prev));
+    growComposer();
+  }, [growComposer]);
 
   const patchMsg = useCallback((id: string, patch: Partial<ChatMsg> | ((m: ChatMsg) => Partial<ChatMsg>)) => {
     setMessages((prev) =>
@@ -144,6 +185,7 @@ export function ChatClient() {
               retryable: true,
             },
           });
+          restoreTextOnFailure(text);
           return;
         }
 
@@ -222,6 +264,7 @@ export function ChatClient() {
                     retryable: Boolean(ev.retryable),
                   },
                 });
+                restoreTextOnFailure(text);
                 break;
             }
           }
@@ -231,17 +274,19 @@ export function ChatClient() {
             thinking: false,
             error: { code: "INCOMPLETE_TURN", message: "The turn ended without an answer.", retryable: true },
           });
+          restoreTextOnFailure(text);
         }
       } catch {
         patchMsg(assistantId, {
           thinking: false,
           error: { code: "NETWORK_ERROR", message: "Network error — please retry.", retryable: true },
         });
+        restoreTextOnFailure(text);
       } finally {
         setBusy(false);
       }
     },
-    [busy, patchMsg],
+    [busy, patchMsg, restoreTextOnFailure],
   );
 
   function onSubmit(e: FormEvent) {
@@ -249,9 +294,25 @@ export function ChatClient() {
     void send(input);
   }
 
+  /** Desktop: Enter sends; Shift+Enter inserts a newline (safe multiline). */
+  function onComposerKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void send(input);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
-      <div ref={logRef} data-testid="chat-log" className="flex-1 space-y-5 overflow-y-auto px-4 py-6 sm:px-6">
+      <div
+        ref={logRef}
+        data-testid="chat-log"
+        role="log"
+        aria-live="polite"
+        aria-label="Conversation"
+        onScroll={onLogScroll}
+        className="flex-1 space-y-5 overflow-y-auto px-4 py-6 sm:px-6"
+      >
         {messages.length === 0 && (
           <div className="mx-auto max-w-md rounded-3xl border border-cream-300 bg-cream-50 p-5">
             <p className="text-base font-semibold text-navy-900">नमस्ते! Main RailSaarthi हूँ.</p>
@@ -342,21 +403,42 @@ export function ChatClient() {
         ))}
       </div>
 
+      {showJump && (
+        <div className="flex justify-center pb-1">
+          <button
+            type="button"
+            data-testid="jump-latest"
+            onClick={jumpToLatest}
+            className="rounded-full border border-navy-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-navy-700 shadow-sm transition hover:border-navy-400"
+          >
+            ↓ Jump to latest
+          </button>
+        </div>
+      )}
+
       <form onSubmit={onSubmit} className="border-t border-cream-300 bg-cream-50 p-3 sm:p-4">
-        <div className="mx-auto flex max-w-2xl items-center gap-2">
-          <input
+        <div className="mx-auto flex max-w-2xl items-end gap-2">
+          <textarea
+            ref={composerRef}
             aria-label="Message"
+            aria-multiline="true"
+            rows={1}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              growComposer();
+            }}
+            onKeyDown={onComposerKeyDown}
             placeholder="ट्रेन, PNR, लाइव स्टेटस… / trains, PNR, live status…"
-            className="min-w-0 flex-1 rounded-full border border-cream-300 bg-white px-4 py-3 text-sm text-navy-900 placeholder:text-navy-300 focus:border-navy-400 focus:outline-none"
+            className="min-w-0 flex-1 resize-none rounded-3xl border border-cream-300 bg-white px-4 py-3 text-sm leading-relaxed text-navy-900 placeholder:text-navy-300 focus:border-navy-400 focus:outline-none"
           />
           <button
             type="submit"
             disabled={busy || !input.trim()}
+            aria-busy={busy}
             className="shrink-0 rounded-full bg-navy-900 px-5 py-3 text-sm font-semibold text-cream-50 transition hover:bg-navy-800 disabled:opacity-40"
           >
-            Send
+            {busy ? "Sending…" : "Send"}
           </button>
         </div>
       </form>

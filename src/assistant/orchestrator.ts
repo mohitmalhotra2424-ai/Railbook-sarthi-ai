@@ -79,6 +79,9 @@ function deriveCards(turnResults: ToolResult[]): TrainCard[] {
       const from = row.from as { code?: string; name?: string } | undefined;
       const to = row.to as { code?: string; name?: string } | undefined;
       if (typeof row.trainNumber !== "string" || typeof row.trainName !== "string") continue;
+      const rawClasses = Array.isArray(row.classes)
+        ? row.classes.filter((c): c is string => typeof c === "string")
+        : undefined;
       cards.push({
         trainNumber: row.trainNumber,
         trainName: row.trainName,
@@ -86,6 +89,9 @@ function deriveCards(turnResults: ToolResult[]): TrainCard[] {
         to: `${to?.name ?? ""}${to?.code ? ` (${to.code})` : ""}`.trim(),
         departure: String(row.departure ?? ""),
         arrival: String(row.arrival ?? ""),
+        // Only fields the provider actually returned — UI labels missing ones.
+        ...(rawClasses && rawClasses.length > 0 ? { classes: rawClasses } : {}),
+        ...(typeof result.journeyDate === "string" && result.journeyDate ? { journeyDate: result.journeyDate } : {}),
       });
     }
   }
