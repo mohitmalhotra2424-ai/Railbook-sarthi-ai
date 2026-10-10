@@ -59,23 +59,31 @@ export default function HomePage() {
   return (
     <div>
       {/* Hero */}
-      <section className="bg-navy-950 px-4 pt-12 pb-12 text-center sm:pt-16 sm:pb-14">
-        <div className="mx-auto max-w-2xl">
-          <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-navy-700 bg-navy-900 px-3 py-1 text-[11px] font-semibold text-navy-100">
-            <BrandMark className="h-3.5 w-3.5 text-saffron-500" />
+      <section className="relative overflow-hidden bg-navy-950 px-4 pt-12 pb-12 text-center sm:pt-16 sm:pb-14">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(52rem_24rem_at_50%_-6rem,rgb(207_154_51/0.16),transparent_70%)]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-saffron-500/50 to-transparent"
+        />
+        <div className="relative mx-auto max-w-2xl">
+          <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-saffron-500/30 bg-navy-900/80 px-3.5 py-1 text-[11px] font-semibold tracking-wide text-saffron-400">
+            <BrandMark className="h-3.5 w-3.5" />
             Indian Railways · AI assistant
           </p>
-          <h1 className="mt-4 text-4xl font-bold tracking-tight text-cream-50 sm:text-5xl">
-            Your Journey, Simplified.
+          <h1 className="font-display mt-5 text-[40px] leading-[1.08] font-semibold tracking-tight text-cream-50 sm:text-6xl">
+            Your Journey, <span className="text-saffron-400 italic">Simplified.</span>
           </h1>
-          <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-navy-200 sm:text-base">
+          <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-navy-200 sm:text-base">
             Ask anything about Indian Railways in Hindi, Hinglish or English —
             trains, timings, fares, seat availability, routes and PNR status.
           </p>
           <Link
             href="/chat"
             data-testid="start-chatting"
-            className="mt-7 inline-flex min-h-12 items-center justify-center rounded-full bg-saffron-500 px-8 text-[15px] font-bold text-navy-950 transition hover:bg-saffron-600 hover:text-cream-50"
+            className="surface-shadow mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-saffron-500 px-9 text-[15px] font-bold text-navy-950 transition hover:bg-saffron-400"
           >
             Start Chatting
           </Link>
@@ -85,13 +93,16 @@ export default function HomePage() {
 
       {/* Features */}
       <section className="mx-auto max-w-3xl px-4 pt-10">
-        <h2 className="text-center text-lg font-bold text-navy-900">
+        <h2 className="font-display text-center text-2xl font-semibold text-navy-900">
           Ek assistant, poori railway jaankari
         </h2>
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {FEATURES.map((f) => (
-            <div key={f.title} className="rounded-2xl border border-cream-300 bg-white p-3.5 sm:p-4">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-navy-50 text-navy-800">
+            <div
+              key={f.title}
+              className="surface-shadow rounded-2xl border border-cream-300 bg-white p-3.5 transition hover:-translate-y-0.5 sm:p-4"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-saffron-500/25 bg-saffron-500/10 text-saffron-600">
                 <f.icon className="h-4.5 w-4.5" />
               </span>
               <p className="mt-2.5 text-[13px] font-bold text-navy-900">{f.title}</p>
@@ -103,19 +114,23 @@ export default function HomePage() {
 
       {/* How it works */}
       <section className="mx-auto max-w-3xl px-4 pt-9">
-        <h2 className="text-center text-lg font-bold text-navy-900">How it works</h2>
-        <ol className="mt-4 grid gap-3 sm:grid-cols-3">
+        <h2 className="font-display text-center text-2xl font-semibold text-navy-900">How it works</h2>
+        <ol className="relative mt-6 grid gap-3 sm:grid-cols-3">
+          <span
+            aria-hidden
+            className="absolute top-4 right-[16%] left-[16%] hidden h-px bg-gradient-to-r from-saffron-500/0 via-saffron-500/40 to-saffron-500/0 sm:block"
+          />
           {[
             { t: "Ask a question", d: "Apni bhasha mein likhein ya bolein — koi form nahi." },
             { t: "Get railway information", d: "Assistant authorized providers se jaankari laata hai." },
             { t: "Explore the results", d: "Cards me timings, fare, availability — source ke saath." },
-          ].map((s, i) => (
-            <li key={s.t} className="rounded-2xl border border-cream-300 bg-cream-50 p-4">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-navy-900 text-xs font-bold text-cream-50">
+          ].map((st, i) => (
+            <li key={st.t} className="relative rounded-2xl border border-cream-300 bg-cream-50 p-4">
+              <span className="font-display flex h-8 w-8 items-center justify-center rounded-full border border-saffron-500/40 bg-white text-sm font-semibold text-saffron-600">
                 {i + 1}
               </span>
-              <p className="mt-2 text-[13px] font-bold text-navy-900">{s.t}</p>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-navy-600">{s.d}</p>
+              <p className="mt-2.5 text-[13px] font-bold text-navy-900">{st.t}</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-navy-600">{st.d}</p>
             </li>
           ))}
         </ol>
@@ -123,7 +138,7 @@ export default function HomePage() {
 
       {/* Example questions */}
       <section className="mx-auto max-w-3xl px-4 pt-9">
-        <h2 className="text-center text-sm font-bold text-navy-900">Try tapping one</h2>
+        <h2 className="font-display text-center text-lg font-semibold text-navy-900">Try tapping one</h2>
         <div className="mt-3 flex flex-wrap justify-center gap-2">
           {EXAMPLES.map((s) => (
             <Link

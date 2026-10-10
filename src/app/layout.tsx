@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
-import { Inter, Noto_Sans_Devanagari } from "next/font/google";
+import { Fraunces, Inter, Noto_Sans_Devanagari } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { BrandMark } from "@/components/icons";
@@ -8,6 +8,13 @@ import { BrandMark } from "@/components/icons";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-fraunces",
   display: "swap",
 });
 
@@ -30,7 +37,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#081226",
+  themeColor: "#081f1a",
   // Mobile keyboards resize the visual viewport so the composer stays
   // reachable instead of being covered (keyboard-aware behaviour).
   interactiveWidget: "resizes-content",
@@ -46,7 +53,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${devanagari.variable} h-full`}>
+    <html lang="en" className={`${inter.variable} ${devanagari.variable} ${fraunces.variable} h-full`}>
       <body className="flex h-full min-h-dvh flex-col bg-cream-100 font-sans text-navy-950 antialiased">
         <Providers>
           <a
@@ -69,7 +76,7 @@ export default function RootLayout({
                   <BrandMark className="h-5.5 w-5.5" />
                 </span>
                 <span className="min-w-0 leading-tight">
-                  <span className="block truncate text-[15px] font-bold tracking-tight text-cream-50">
+                  <span className="font-display block truncate text-[15px] font-semibold tracking-tight text-cream-50">
                     RailSaarthi AI
                   </span>
                   <span className="hidden truncate text-[10px] font-medium text-navy-300 min-[400px]:block">

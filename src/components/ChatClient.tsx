@@ -463,7 +463,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
 
           {messages.length === 0 && (
             <div className="pt-4 pb-2 text-center sm:pt-10">
-              <p className="text-lg font-bold text-navy-900">नमस्ते! Main RailSaarthi हूँ.</p>
+              <p className="font-display text-xl font-semibold text-navy-900">नमस्ते! Main RailSaarthi हूँ.</p>
               <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-navy-600">
                 Trains ke baare mein kuch bhi poochhein — Hindi, Hinglish ya English.
                 Live answers sirf authorized providers se aate hain; main kabhi guess

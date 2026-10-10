@@ -5,37 +5,43 @@
  * Tailwind v4 @theme generates utilities (bg-navy-900, text-cream-100, …).
  */
 @theme {
-  /* Navy scale */
-  --color-navy-50: #eef3fb;
-  --color-navy-100: #d9e3f5;
-  --color-navy-200: #b6c8ea;
-  --color-navy-300: #8aa6d9;
-  --color-navy-400: #5b81c3;
-  --color-navy-500: #3a63a8;
-  --color-navy-600: #2a4c8a;
-  --color-navy-700: #1f3a6d;
-  --color-navy-800: #16294f;
-  --color-navy-900: #0e1c3a;
-  --color-navy-950: #081226;
+  /* Deep heritage pine (old Indian Railways livery) — brand + primary actions */
+  --color-navy-50: #eef6f2;
+  --color-navy-100: #d7ebe2;
+  --color-navy-200: #b0d6c6;
+  --color-navy-300: #83bca6;
+  --color-navy-400: #559d84;
+  --color-navy-500: #35816a;
+  --color-navy-600: #276856;
+  --color-navy-700: #1f5346;
+  --color-navy-800: #174036;
+  --color-navy-900: #103028;
+  --color-navy-950: #081f1a;
 
-  /* Off-white / cream scale */
-  --color-cream-50: #fdfcf9;
-  --color-cream-100: #faf7f0;
-  --color-cream-200: #f3eee2;
-  --color-cream-300: #e9e1cf;
-  --color-cream-400: #d8cdb2;
+  /* Warm ivory surfaces */
+  --color-cream-50: #fcfbf8;
+  --color-cream-100: #f7f4ed;
+  --color-cream-200: #efe9dc;
+  --color-cream-300: #e3dac6;
+  --color-cream-400: #d0c2a4;
 
-  /* Accents */
-  --color-saffron-500: #e2862a;
-  --color-saffron-600: #c26d1b;
-  --color-signal-500: #1f9d61;
-  --color-signal-700: #146c43;
+  /* Brushed gold — the single restrained accent */
+  --color-saffron-400: #dcaf4f;
+  --color-saffron-500: #cf9a33;
+  --color-saffron-600: #b07f22;
+
+  /* Semantic status colours (always paired with text labels) */
+  --color-signal-500: #149a63;
+  --color-signal-700: #0e6b45;
   --color-alert-500: #c2410c;
 
   --font-sans:
     var(--font-inter), var(--font-devanagari), ui-sans-serif, system-ui,
     "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Nirmala UI",
     "Kohinoor Devanagari", "Mangal", sans-serif;
+
+  /* Serif display face for premium headlines */
+  --font-display: var(--font-fraunces), var(--font-devanagari), Georgia, "Times New Roman", serif;
 }
 
 html {
