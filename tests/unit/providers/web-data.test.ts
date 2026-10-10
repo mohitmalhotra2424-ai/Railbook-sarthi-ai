@@ -180,4 +180,21 @@ describe("web-data-v1 — live status chain", () => {
     expect(env.errors[0].code).toBe("UPSTREAM_ERROR");
     expect(env.errors[0].retryable).toBe(true);
   });
+
+  it("60s live cache serves repeats, but refresh:true re-checks the source", async () => {
+    const etaCalls: string[] = [];
+    stubFetch((url) => {
+      if (url.includes("livestatus.railyatri.in")) {
+        etaCalls.push(url);
+        return { body: JSON.stringify(LTS_PAYLOAD) };
+      }
+      return { body: null };
+    });
+    await webDataAdapter.liveStatus("12904", "2026-10-10", ctx);
+    expect(etaCalls).toHaveLength(1);
+    await webDataAdapter.liveStatus("12904", "2026-10-10", ctx); // cached
+    expect(etaCalls).toHaveLength(1);
+    await webDataAdapter.liveStatus("12904", "2026-10-10", { ...ctx, refresh: true }); // explicit re-check
+    expect(etaCalls).toHaveLength(2);
+  });
 });

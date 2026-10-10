@@ -28,6 +28,7 @@ export async function GET(
       const env = await (provider as TimetableProvider).timetable(trainId, date, {
         locale,
         requestId,
+        refresh: url.searchParams.get("refresh") === "1",
       });
       if (env.data !== null && !TimetableSchema.safeParse(env.data).success) {
         return { ...env, data: null };

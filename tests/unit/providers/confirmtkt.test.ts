@@ -33,6 +33,7 @@ const SEARCH_PAYLOAD = {
             quota: "GN",
             confirmTktStatus: "Confirm",
             predictionPercentage: 100,
+            cacheTime: "2026-10-10T18:38:27.001",
           },
           SL: {
             availability: "RLWL4/WL4",
@@ -139,6 +140,16 @@ describe("confirmtkt-v1 adapter — trainSearch", () => {
     expect(fetchMock.mock.calls.every((c) => !String(c[0]).includes("auto-suggestion"))).toBe(true);
   });
 
+  it("cache hit on repeat, but refresh:true forces a fresh upstream call", async () => {
+    const q = { from: "LDH", to: "NDLS", date: "2026-10-12" };
+    await confirmtktAdapter.search(q, ctx);
+    const after1 = fetchMock.mock.calls.filter((c) => String(c[0]).includes("trains/search")).length;
+    await confirmtktAdapter.search(q, ctx); // cached — no new fetch
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes("trains/search")).length).toBe(after1);
+    await confirmtktAdapter.search(q, { ...ctx, refresh: true }); // explicit re-check
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes("trains/search")).length).toBe(after1 + 1);
+  });
+
   it("resolves lowercase codes via autocomplete (not mistaken for words)", async () => {
     const env = await confirmtktAdapter.search({ from: "ldh", to: "ndls", date: "2026-10-12" }, ctx);
     expect(env.data).toHaveLength(2);
@@ -224,8 +235,11 @@ describe("confirmtkt-v1 adapter — seatAvailability", () => {
     );
     expect(env.data).not.toBeNull();
     const byClass = Object.fromEntries(env.data!.classes.map((c) => [c.classCode, c]));
-    expect(byClass["3A"]).toEqual({ classCode: "3A", status: "AVL 25", seatsText: "AVAILABLE-25" });
-    expect(byClass["SL"]).toEqual({ classCode: "SL", status: "WL 4", seatsText: "RLWL4/WL4" });
+    // asOf = PROVIDER-reported snapshot time (their clock) — distinct from our
+    // envelope retrievedAt; null upstream is surfaced as null, never invented.
+    expect(byClass["3A"]).toEqual({ classCode: "3A", status: "AVL 25", seatsText: "AVAILABLE-25", asOf: "2026-10-10T18:38:27.001" });
+    expect(byClass["SL"]).toEqual({ classCode: "SL", status: "WL 4", seatsText: "RLWL4/WL4", asOf: null });
+    expect(env.retrievedAt).toBeTruthy(); // our own retrieval timestamp
     expect(envelopeContractViolations(env, { secrets: ["ct-web!2$"] })).toEqual([]);
   });
 

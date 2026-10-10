@@ -28,7 +28,7 @@ export async function GET(request: Request): Promise<Response> {
   const envelope = await executeCapabilityFailover(
     "trainSearch",
     async (provider) => {
-      const env = await (provider as TrainSearchProvider).search(query, { locale, requestId });
+      const env = await (provider as TrainSearchProvider).search(query, { locale, requestId, refresh: url.searchParams.get("refresh") === "1" });
       // Defense-in-depth: even adapter output is re-validated at the boundary.
       if (env.data !== null && !z.array(TrainSummarySchema).safeParse(env.data).success) {
         return { ...env, data: null };

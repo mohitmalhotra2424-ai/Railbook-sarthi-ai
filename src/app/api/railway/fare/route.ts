@@ -24,7 +24,7 @@ export async function GET(request: Request): Promise<Response> {
   const envelope = await executeCapabilityFailover(
     "fare",
     async (provider) => {
-      const env = await (provider as FareProvider).fare(query, { locale, requestId });
+      const env = await (provider as FareProvider).fare(query, { locale, requestId, refresh: url.searchParams.get("refresh") === "1" });
       if (env.data !== null && !FareSchema.safeParse(env.data).success) {
         return { ...env, data: null };
       }

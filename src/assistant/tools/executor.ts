@@ -154,7 +154,8 @@ export async function executeTool(
 
   // 3) Provider invocation with timeout + abort propagation.
   const requestId = `${meta.turnId}:${meta.toolCallId}`;
-  const ctx: QueryContext = { locale: "en", requestId };
+  const refresh = (args as { refresh?: unknown }).refresh === true;
+  const ctx: QueryContext = { locale: "en", requestId, refresh };
   try {
     switch (tool) {
       case "SEARCH_TRAINS": {

@@ -266,14 +266,14 @@ interface RawSearch {
   to: CtStation;
 }
 
-async function fetchSearch(fromCode: string, toCode: string, dateIso: string): Promise<RawSearch[]> {
+async function fetchSearch(fromCode: string, toCode: string, dateIso: string, refresh = false): Promise<RawSearch[]> {
   const dateDmy = isoToDdMmYyyy(dateIso);
   const path =
     `/api/v1/trains/search?sourceStationCode=${encodeURIComponent(fromCode)}` +
     `&destinationStationCode=${encodeURIComponent(toCode)}` +
     `&dateOfJourney=${encodeURIComponent(dateDmy)}`;
   const cacheKey = path;
-  const cached = cacheGet(jsonCache, cacheKey) as RawSearch[] | undefined;
+  const cached = refresh ? undefined : (cacheGet(jsonCache, cacheKey) as RawSearch[] | undefined);
   if (cached) return cached;
 
   const json = await fetchJson(path);
@@ -339,7 +339,7 @@ async function searchTrains(q: TrainSearchQuery, ctx: QueryContext): Promise<Res
   try {
     const from = await resolveStation(q.from);
     const to = await resolveStation(q.to);
-    const [result] = await fetchSearch(from.code, to.code, dateIso);
+    const [result] = await fetchSearch(from.code, to.code, dateIso, ctx.refresh === true);
     // Prefer real station names from the response payload over bare codes.
     const first = result.trains[0];
     const data = result.trains.map((t) => ({
@@ -367,7 +367,7 @@ async function availability(
     const from = await resolveStation(q.from);
     const to = await resolveStation(q.to);
     const dateIso = q.date?.trim() || istTodayIso();
-    const [result] = await fetchSearch(from.code, to.code, dateIso);
+    const [result] = await fetchSearch(from.code, to.code, dateIso, ctx.refresh === true);
     const row = findTrainRow(result.rows, q.trainId);
     if (!row) {
       return err(
@@ -388,7 +388,10 @@ async function availability(
           typeof c.entry.availabilityDisplayName === "string" && c.entry.availabilityDisplayName.trim()
             ? c.entry.availabilityDisplayName.trim()
             : raw;
-        return { classCode: c.classCode, status: display, seatsText: raw || null };
+        // Provider-reported snapshot time (their clock) — distinct from our
+        // envelope retrievedAt. Absent upstream => null, never invented.
+        const asOf = typeof c.entry.cacheTime === "string" && c.entry.cacheTime.trim() ? c.entry.cacheTime.trim() : null;
+        return { classCode: c.classCode, status: display, seatsText: raw || null, asOf };
       })
       .filter((c) => c.status.length > 0);
     if (classes.length === 0) {
@@ -431,7 +434,7 @@ async function fare(q: FareQuery, ctx: QueryContext): Promise<ResultEnvelope<Far
     const from = await resolveStation(q.from);
     const to = await resolveStation(q.to);
     const dateIso = q.date?.trim() || istTodayIso();
-    const [result] = await fetchSearch(from.code, to.code, dateIso);
+    const [result] = await fetchSearch(from.code, to.code, dateIso, ctx.refresh === true);
     const row = findTrainRow(result.rows, q.trainId);
     if (!row) {
       return err(

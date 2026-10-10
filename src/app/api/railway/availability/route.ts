@@ -27,6 +27,7 @@ export async function GET(request: Request): Promise<Response> {
       const env = await (provider as SeatAvailabilityProvider).availability(query, {
         locale,
         requestId,
+        refresh: url.searchParams.get("refresh") === "1",
       });
       if (env.data !== null && !AvailabilitySchema.safeParse(env.data).success) {
         return { ...env, data: null };

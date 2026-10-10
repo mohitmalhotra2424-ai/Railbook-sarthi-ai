@@ -69,6 +69,13 @@ export interface ResultEnvelope<T> {
 export interface QueryContext {
   locale: Locale;
   requestId: string;
+  /**
+   * True when the user explicitly asked to re-check — adapters bypass their
+   * politeness caches and hit the source again. Decided by the LLM via the
+   * tools' `refresh` argument; deterministic caching stays a technical
+   * safeguard, never a barrier to a fresh check.
+   */
+  refresh?: boolean;
 }
 
 export type Capability =

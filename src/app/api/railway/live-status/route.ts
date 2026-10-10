@@ -21,6 +21,7 @@ export async function GET(request: Request): Promise<Response> {
       const env = await (provider as LiveStatusProvider).liveStatus(trainId, date, {
         locale,
         requestId,
+        refresh: url.searchParams.get("refresh") === "1",
       });
       if (env.data !== null && !LiveStatusSchema.safeParse(env.data).success) {
         return { ...env, data: null };

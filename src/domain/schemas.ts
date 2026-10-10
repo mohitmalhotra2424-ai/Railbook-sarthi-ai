@@ -64,6 +64,13 @@ export const AvailabilityClassSchema = z.object({
   classCode: z.string().min(1),
   status: z.string().min(1),
   seatsText: z.string().nullable(),
+  /**
+   * Provider-reported timestamp for this availability snapshot (e.g.
+   * ConfirmTkt's cacheTime), when the provider publishes one. Distinct from
+   * the envelope's retrievedAt (OUR clock). Null/absent = not published —
+   * never fabricated.
+   */
+  asOf: z.string().nullable().optional(),
 });
 export type AvailabilityClass = z.infer<typeof AvailabilityClassSchema>;
 

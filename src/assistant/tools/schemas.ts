@@ -42,6 +42,7 @@ export const SearchTrainsArgs = z.object({
   from: z.string().min(1).describe("Origin station name or code, e.g. 'Ludhiana' or 'LDH'"),
   to: z.string().min(1).describe("Destination station name or code, e.g. 'Delhi' or 'NDLS'"),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").describe(DATE_DESCRIPTION),
+  refresh: z.boolean().optional().describe("True when the user explicitly asks to re-check live data."),
 });
 
 export const GetTrainInfoArgs = z.object({
@@ -56,6 +57,7 @@ export const GetTimetableArgs = z.object({
 export const TrackTrainArgs = z.object({
   trainNumber: numericString(/^\d{4,6}$/, "4-6 digit train number").describe("4-6 digit train number"),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe(DATE_DESCRIPTION),
+  refresh: z.boolean().optional().describe("True when the user explicitly asks to re-check live data."),
 });
 
 export const CheckAvailabilityArgs = z.object({
@@ -64,6 +66,7 @@ export const CheckAvailabilityArgs = z.object({
   from: z.string().min(1).describe("Boarding station name or code"),
   to: z.string().min(1).describe("Destination station name or code"),
   classCode: z.string().min(1).optional().describe("Class such as 'SL', '3A', '2A', '1A', 'CC'. Omit to check all classes."),
+  refresh: z.boolean().optional().describe("True when the user explicitly asks to re-check live data."),
 });
 
 export const GetFareArgs = z.object({
@@ -77,6 +80,7 @@ export const GetFareArgs = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD")
     .optional()
     .describe(`${DATE_DESCRIPTION} Optional — fares on some trains vary by date.`),
+  refresh: z.boolean().optional().describe("True when the user explicitly asks to re-check live data."),
 });
 
 export const CheckPnrArgs = z.object({
@@ -123,6 +127,7 @@ export const TOOL_DEFINITIONS: ChatToolDef[] = [
           from: str("Origin station name or code, e.g. 'Ludhiana' or 'LDH'"),
           to: str("Destination station name or code, e.g. 'Delhi' or 'NDLS'"),
           date: str(DATE_DESCRIPTION),
+          refresh: { type: "boolean", description: "Set true ONLY when the user explicitly asks to re-check / refresh live data (e.g. 'phir se check karo') — bypasses our short cache and queries the source again." },
         },
         required: ["from", "to", "date"],
       },
@@ -165,6 +170,7 @@ export const TOOL_DEFINITIONS: ChatToolDef[] = [
         properties: {
           trainNumber: str("4-6 digit train number"),
           date: str(DATE_DESCRIPTION),
+          refresh: { type: "boolean", description: "Set true ONLY when the user explicitly asks to re-check / refresh live data (e.g. 'phir se check karo') — bypasses our short cache and queries the source again." },
         },
         required: ["trainNumber", "date"],
       },
@@ -184,6 +190,7 @@ export const TOOL_DEFINITIONS: ChatToolDef[] = [
           from: str("Boarding station name or code"),
           to: str("Destination station name or code"),
           classCode: str("Optional class: 'SL','3A','2A','1A','CC',… Omit to check all classes."),
+          refresh: { type: "boolean", description: "Set true ONLY when the user explicitly asks to re-check / refresh live data (e.g. 'phir se check karo') — bypasses our short cache and queries the source again." },
         },
         required: ["trainNumber", "date", "from", "to"],
       },
@@ -203,6 +210,7 @@ export const TOOL_DEFINITIONS: ChatToolDef[] = [
           classCode: str("Class: 'SL','3A','2A','1A','CC',…"),
           quota: str("Optional quota: 'GN','TQ',…"),
           date: str(`${DATE_DESCRIPTION} Optional — pass the journey date when known; fares on some trains vary by date.`),
+          refresh: { type: "boolean", description: "Set true ONLY when the user explicitly asks to re-check / refresh live data (e.g. 'phir se check karo') — bypasses our short cache and queries the source again." },
         },
         required: ["trainNumber", "from", "to", "classCode"],
       },

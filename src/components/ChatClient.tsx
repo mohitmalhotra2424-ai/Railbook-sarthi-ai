@@ -73,6 +73,11 @@ function ToolChipView({ chip }: { chip: ToolChip }) {
         <span aria-hidden>⚠</span>
       )}
       {chip.phase === "running" ? `${label}…` : `${label} · ${chip.summary ?? chip.status}`}
+      {chip.phase !== "running" && chip.source && (
+        <span className="text-navy-500/80" title="Data source">
+          via {chip.source}
+        </span>
+      )}
       {chip.freshness === "stale" && <span className="font-semibold">(stale)</span>}
     </span>
   );

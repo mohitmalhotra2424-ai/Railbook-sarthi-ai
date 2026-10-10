@@ -315,7 +315,7 @@ async function timetable(
     };
   }
   const cacheKey = `sched:${num}`;
-  const cached = cacheGet<Timetable>(cacheKey);
+  const cached = ctx.refresh === true ? undefined : cacheGet<Timetable>(cacheKey);
   if (cached) {
     return okEnvelope({
       data: { ...cached, date: date?.trim() || istTodayIso() },
@@ -385,7 +385,7 @@ async function liveStatus(
     };
   }
   const cacheKey = `live:${num}`;
-  const cached = cacheGet<LiveStatus>(cacheKey);
+  const cached = ctx.refresh === true ? undefined : cacheGet<LiveStatus>(cacheKey);
   if (cached) {
     return okEnvelope({ data: cached, source: SOURCE, ttlSeconds: LIVE_TTL_SECONDS, requestId: ctx.requestId });
   }

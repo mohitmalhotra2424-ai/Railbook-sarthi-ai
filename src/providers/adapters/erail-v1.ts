@@ -258,7 +258,7 @@ async function searchTrains(q: TrainSearchQuery, ctx: QueryContext): Promise<Res
   }
 
   const cacheKey = `tbs:${from.code}|${to.code}`;
-  const hit = cacheGet<TrainSummary[]>(cacheKey);
+  const hit = ctx.refresh === true ? undefined : cacheGet<TrainSummary[]>(cacheKey);
   if (hit) {
     return okEnvelope({ data: hit, source: SOURCE, ttlSeconds: TBS_TTL_SECONDS, requestId: ctx.requestId });
   }
@@ -345,7 +345,7 @@ async function fare(q: FareQuery, ctx: QueryContext): Promise<ResultEnvelope<Far
   }
 
   const cacheKey = `fare:${trainNo}|${from.code}|${to.code}`;
-  const hit = cacheGet<Fare>(cacheKey);
+  const hit = ctx.refresh === true ? undefined : cacheGet<Fare>(cacheKey);
   if (hit) return okEnvelope({ data: hit, source: SOURCE, ttlSeconds: FARE_TTL_SECONDS, requestId: ctx.requestId });
 
   let html: string;
