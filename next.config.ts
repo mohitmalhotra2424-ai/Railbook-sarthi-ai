@@ -1,9 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  /**
+   * cacheComponents (Cache Components / PPR) is disabled in Phase 1:
+   * live-data pages opt into request-time rendering with
+   * `export const dynamic = "force-dynamic"`, which cacheComponents forbids.
+   * Revisit when Phase 2 adopts Suspense-boundary caching per section.
+   */
+  cacheComponents: false,
   turbopack: {
     rules: {
       "*.css": {
