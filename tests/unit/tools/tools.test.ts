@@ -41,6 +41,12 @@ describe("tool definitions ↔ zod validation stay in sync", () => {
       Object.values(ToolNames).sort(),
     );
   });
+
+  it("exposes NO booking/payment/ticket-issuance tools (booking stays disabled)", () => {
+    for (const def of TOOL_DEFINITIONS) {
+      expect(def.function.name).not.toMatch(/BOOK|PAY|ISSUE|OTP|PASSENGER_SUBMIT/i);
+    }
+  });
 });
 
 describe("executeTool — validation boundary (never executes invalid args)", () => {

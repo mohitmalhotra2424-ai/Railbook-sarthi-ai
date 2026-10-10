@@ -330,3 +330,25 @@ if Playwright browser install proves infeasible, E2E is deferred with explicit n
 - **D4 — E2E:** ✅ **Playwright included in Phase 1** (360×800). If the browser install proves infeasible on 1.9 GB RAM, that will be flagged explicitly, not silently dropped.
 
 Execution of §5 (M0–M8) begins only on explicit approval.
+
+---
+
+## Addendum — superseded decisions (Prompts 2 & 3, 2026-10-10)
+
+The following Prompt-1 decisions were **superseded by the owner-approved
+Prompt-2 architecture** (LLM-first) and verified again in the Prompt-3 audit:
+
+- **§2/§4.5/M5 “Named adapters (OpenAI/Anthropic/Gemini)” → REPLACED** by a
+  generic **OpenAI-compatible LLM client** (`src/assistant/llm/client.ts`)
+  configured via `LLM_PROVIDER / LLM_MODEL / LLM_API_KEY / LLM_BASE_URL`.
+  Verified live against NVIDIA `meta/muse-glimmer-30b` (primary) and
+  `openai/gpt-oss-20b` (explicitly configured fallback), including
+  structured tool calling.
+- **M5 “intent routing (hi/hinglish/en)” → DELETED.** The LLM is the sole
+  conversational interpreter and tool orchestrator; `intents.ts`,
+  `grounding.ts` and `respond.ts` no longer exist (enforced by structure
+  tests in `tests/unit/orchestrator.test.ts`).
+- **Railway sources:** ConfirmTkt, eRail, RailYatri, Trainman and
+  IRCTC live-pull are **scrapped for automated access** (owner decision,
+  Prompt 3). The registry ships zero adapters; live lookups return the
+  honest `not_configured` state. See `docs/provider-terms.md`.

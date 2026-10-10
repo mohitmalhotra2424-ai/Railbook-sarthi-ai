@@ -134,6 +134,69 @@ describe("OpenAiCompatibleClient.chat", () => {
   });
 });
 
+describe("OpenAI-compatible adapter — NVIDIA configuration compatibility (Prompt 3 §4)", () => {
+  const NVIDIA_ENV = {
+    NODE_ENV: "test",
+    LLM_PROVIDER: "nvidia",
+    LLM_MODEL: "meta/muse-glimmer-30b",
+    LLM_API_KEY: "nvapi-compat-test-key",
+    LLM_BASE_URL: "https://integrate.api.nvidia.com/v1",
+  } as NodeJS.ProcessEnv;
+
+  it("routes NVIDIA config to <base>/chat/completions with the exact model id", async () => {
+    const cfg = readLlmConfigs(NVIDIA_ENV).primary!;
+    const capture: { url?: string; init?: RequestInit } = {};
+    const wrapped = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      capture.url = String(url);
+      capture.init = init;
+      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" }, finish_reason: "stop" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    await new OpenAiCompatibleClient(cfg, wrapped).chat({
+      messages: MESSAGES,
+      tools: [{ type: "function", function: { name: "T", description: "d", parameters: {} } }],
+    });
+    expect(capture.url).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(JSON.parse(String(capture.init?.body)).model).toBe("meta/muse-glimmer-30b");
+  });
+
+  it("parses the exact NVIDIA tool_calls payload shape observed in live runs", async () => {
+    const cfg = readLlmConfigs(NVIDIA_ENV).primary!;
+    // Verbatim structure captured from the live NVIDIA endpoint (key redacted).
+    const nvidiaPayload = {
+      choices: [
+        {
+          message: {
+            content: null,
+            tool_calls: [
+              {
+                id: "chatcmpl-tool-a3609c81ffeecf73",
+                type: "function",
+                function: {
+                  name: "SEARCH_TRAINS",
+                  arguments: '{"from": "Ludhiana", "to": "Delhi", "date": "2026-10-11"}',
+                },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    };
+    const res = await new OpenAiCompatibleClient(cfg, transportReturning(nvidiaPayload)).chat({
+      messages: MESSAGES,
+    });
+    expect(res.finishReason).toBe("tool_calls");
+    expect(res.toolCalls[0]).toMatchObject({
+      name: "SEARCH_TRAINS",
+      args: { from: "Ludhiana", to: "Delhi", date: "2026-10-11" },
+    });
+  });
+});
+
 describe("LLM config from env", () => {
   const ENV = {
     NODE_ENV: "test",
