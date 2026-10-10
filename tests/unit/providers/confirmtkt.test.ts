@@ -185,6 +185,35 @@ describe("confirmtkt-v1 adapter — trainSearch", () => {
     expect(env.data).toBeNull();
     expect(env.errors[0].code).toBe("NOT_FOUND");
   });
+
+  it("surfaces upstream error payloads (e.g. HTTP 400 + 4002 past date) with their safe message", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("trains/search")) {
+        // Real-world shape: HTTP 400 WITH the structured error body.
+        return jsonResponse({ error: { code: 4002, message: "Journey date cannot be in the past" } }, 400);
+      }
+      return jsonResponse(SUGGEST_LUDHIANA);
+    });
+    const env = await confirmtktAdapter.search({ from: "LDH", to: "BEAS", date: "2026-09-24" }, ctx);
+    expect(env.data).toBeNull();
+    expect(env.errors[0].code).toBe("VALIDATION_FAILED");
+    expect(env.errors[0].message).toContain("Journey date cannot be in the past");
+    expect(env.errors[0].retryable).toBe(false);
+  });
+
+  it("maps unknown upstream error codes to retryable UPSTREAM_ERROR", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("trains/search")) {
+        return jsonResponse({ error: { code: 5999, message: "something broke upstream" } });
+      }
+      return jsonResponse(SUGGEST_LUDHIANA);
+    });
+    const env = await confirmtktAdapter.search({ from: "LDH", to: "BEAS", date: "2026-10-12" }, ctx);
+    expect(env.data).toBeNull();
+    expect(env.errors[0].code).toBe("UPSTREAM_ERROR");
+    expect(env.errors[0].message).toContain("5999");
+    expect(env.errors[0].retryable).toBe(true);
+  });
 });
 
 describe("confirmtkt-v1 adapter — seatAvailability", () => {

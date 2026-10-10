@@ -140,11 +140,19 @@ export async function executeCapabilityFailover<T>(
   if (providers.length === 0) return notConfiguredEnvelope(capability, requestId);
 
   const failures: ProviderError[] = [];
+  let lastTried: { providerId: string; kind: "authorized-partner"; termsRef: string; authorization: "configured" } | null =
+    null;
   for (const provider of providers) {
     let env: ResultEnvelope<T | null>;
     try {
       env = await invoke(provider);
     } catch (reason) {
+      lastTried = {
+        providerId: provider.id,
+        kind: "authorized-partner",
+        termsRef: provider.termsRef,
+        authorization: "configured",
+      };
       failures.push(
         providerError(
           "UPSTREAM_ERROR",
@@ -159,18 +167,33 @@ export async function executeCapabilityFailover<T>(
     if (env.data !== null && env.data !== undefined) {
       return failures.length > 0 ? { ...env, errors: [...failures, ...env.errors] } : env;
     }
+    lastTried = {
+      providerId: env.source.providerId,
+      kind: "authorized-partner",
+      termsRef: env.source.termsRef,
+      authorization: "configured",
+    };
     failures.push(...env.errors);
+    // Query-level refusals (invalid input, nothing found) are NOT provider
+    // failures — another source cannot answer them either, and e.g. eRail's
+    // date-unaware list would be misleading for a rejected date. Stop here.
+    if (env.errors.length > 0 && env.errors.every((e) => e.retryable === false)) {
+      break;
+    }
   }
 
-  // Every configured provider failed — return the honest merged failure.
+  // Every invoked provider failed — return the honest merged failure,
+  // attributed to the provider that was actually tried last.
+  const attributed =
+    lastTried ?? {
+      providerId: providers[providers.length - 1].id,
+      kind: "authorized-partner" as const,
+      termsRef: providers[providers.length - 1].termsRef,
+      authorization: "configured" as const,
+    };
   return {
     data: null,
-    source: {
-      providerId: providers[providers.length - 1].id,
-      kind: "authorized-partner",
-      termsRef: providers[providers.length - 1].termsRef,
-      authorization: "configured",
-    },
+    source: attributed,
     retrievedAt: new Date().toISOString(),
     freshness: "unknown",
     ttlSeconds: 0,

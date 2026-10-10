@@ -123,17 +123,33 @@ async function fetchJson(path: string): Promise<Record<string, unknown>> {
   if (res.status === 429) {
     throw new UpstreamError("RATE_LIMITED", "ConfirmTkt rate-limited the request (HTTP 429).");
   }
+  // The API sends its structured error payload even on non-2xx statuses
+  // (e.g. HTTP 400 + {"error":{"code":4002,...}}) — parse before rejecting.
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+  if (json && typeof json === "object" && (json as { error?: unknown }).error) {
+    const rawErr = (json as { error: unknown }).error;
+    const e: Record<string, unknown> = rawErr && typeof rawErr === "object" ? (rawErr as Record<string, unknown>) : {};
+    const code = typeof e.code === "number" ? e.code : null;
+    // Upstream messages are user-safe (no credentials) and actionable —
+    // surface them so the model can react (e.g. re-ask for a valid date).
+    const message = typeof e.message === "string" && e.message.trim() ? e.message.trim().slice(0, 200) : "unknown API error";
+    if (code === 4002) {
+      // "Journey date cannot be in the past" — a user-input problem, not retryable.
+      throw new UpstreamError("VALIDATION_FAILED", `ConfirmTkt: ${message}`, false);
+    }
+    throw new UpstreamError("UPSTREAM_ERROR", `ConfirmTkt API error${code !== null ? ` ${code}` : ""}: ${message}`);
+  }
   if (!res.ok) {
     throw new UpstreamError("UPSTREAM_ERROR", `ConfirmTkt returned HTTP ${res.status}.`);
   }
-  let json: unknown;
-  try {
-    json = await res.json();
-  } catch {
+  if (!json || typeof json !== "object") {
     throw new UpstreamError("UPSTREAM_ERROR", "ConfirmTkt returned a non-JSON response.");
-  }
-  if (json && typeof json === "object" && (json as { error?: unknown }).error) {
-    throw new UpstreamError("UPSTREAM_ERROR", "ConfirmTkt returned an API error payload.");
   }
   return json as Record<string, unknown>;
 }

@@ -28,7 +28,11 @@ function okData(id: string): TrainSummary[] {
   ];
 }
 
-function makeFake(id: string, priority: number, behavior: "ok" | "error" | "throw"): RailwayProvider & { calls: number } {
+function makeFake(
+  id: string,
+  priority: number,
+  behavior: "ok" | "error" | "throw" | "nonretryable",
+): RailwayProvider & { calls: number } {
   const fake = {
     id,
     capabilities: ["trainSearch"] as const,
@@ -42,6 +46,13 @@ function makeFake(id: string, priority: number, behavior: "ok" | "error" | "thro
     async search(): Promise<ResultEnvelope<TrainSummary[] | null>> {
       fake.calls += 1;
       if (behavior === "throw") throw new Error(`${id} exploded`);
+      if (behavior === "nonretryable") {
+        return errorEnvelope({
+          source: source(id),
+          errors: [providerError("VALIDATION_FAILED", `${id}: journey date cannot be in the past`, { retryable: false })],
+          requestId: "r",
+        });
+      }
       if (behavior === "error") {
         return errorEnvelope({
           source: source(id),
@@ -56,7 +67,7 @@ function makeFake(id: string, priority: number, behavior: "ok" | "error" | "thro
 }
 
 const fakes: string[] = [];
-function addFake(id: string, priority: number, behavior: "ok" | "error" | "throw") {
+function addFake(id: string, priority: number, behavior: "ok" | "error" | "throw" | "nonretryable") {
   registerAdapter(makeFake(id, priority, behavior));
   fakes.push(id);
 }
@@ -128,6 +139,25 @@ describe("executeCapabilityFailover — 'if not available, try the next source'"
     expect(env.errors[0].message).toContain("fo-throw exploded");
   });
 
+  it("non-retryable query refusals do NOT trigger the fallback (no misleading data)", async () => {
+    vi.stubEnv("RAILWAY_PROVIDER_IDS", "fo-refuse,fo-back2");
+    const refuse = makeFake("fo-refuse", 10, "nonretryable");
+    const back = makeFake("fo-back2", 20, "ok");
+    registerAdapter(refuse);
+    registerAdapter(back);
+    fakes.push("fo-refuse", "fo-back2");
+    const env = await executeCapabilityFailover<TrainSummary[]>(
+      "trainSearch",
+      (p) => (p as unknown as { search: () => Promise<ResultEnvelope<TrainSummary[] | null>> }).search(),
+      "r",
+    );
+    expect(env.data).toBeNull();
+    expect(env.errors[0].code).toBe("VALIDATION_FAILED");
+    expect(env.source.providerId).toBe("fo-refuse"); // attributed to the provider actually tried
+    expect(refuse.calls).toBe(1);
+    expect(back.calls).toBe(0); // fallback never invoked for a query-level refusal
+  });
+
   it("all providers failing → honest merged error, data null, low confidence", async () => {
     vi.stubEnv("RAILWAY_PROVIDER_IDS", "fo-x,fo-y");
     addFake("fo-x", 10, "error");
@@ -140,6 +170,7 @@ describe("executeCapabilityFailover — 'if not available, try the next source'"
     expect(env.data).toBeNull();
     expect(env.confidence).toBe("low");
     expect(env.errors).toHaveLength(2);
+    expect(env.source.providerId).toBe("fo-y"); // last provider actually invoked
   });
 
   it("no configured provider → canonical NOT_CONFIGURED (no mock path)", async () => {
