@@ -1,0 +1,37 @@
+# Render Blueprint — RailSaarthi AI
+# Deploy: Render dashboard → New → Blueprint → pick the GitHub repo.
+# Secrets (LLM_API_KEY, LLM_FALLBACK_API_KEY) are marked sync:false —
+# Render will prompt for them; they are NEVER stored in this file.
+services:
+  - type: web
+    name: railsaarthi-ai
+    runtime: node
+    plan: free
+    region: singapore
+    nodeVersion: 20.20.2
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: LLM_PROVIDER
+        value: nvidia
+      - key: LLM_MODEL
+        value: meta/muse-glimmer-30b
+      - key: LLM_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: LLM_API_KEY
+        sync: false # enter your NVIDIA key in the Render dashboard
+      - key: LLM_TIMEOUT_MS
+        value: "60000"
+      - key: LLM_FALLBACK_PROVIDER
+        value: nvidia
+      - key: LLM_FALLBACK_MODEL
+        value: openai/gpt-oss-20b
+      - key: LLM_FALLBACK_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: LLM_FALLBACK_API_KEY
+        sync: false # same NVIDIA key is fine
+      - key: RAILWAY_PROVIDER_IDS
+        value: confirmtkt-v1,erail-v1,web-data-v1
+      - key: BOOKING_ENABLED
+        value: "false"
