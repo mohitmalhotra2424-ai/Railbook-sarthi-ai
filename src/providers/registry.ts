@@ -1,0 +1,118 @@
+import { providerError } from "@/domain/errors";
+import { configuredProviderIds, isProviderCredentialPresent } from "./config";
+import { notConfiguredEnvelope } from "./envelope";
+import { reconcileEnvelopes } from "./reconcile";
+import {
+  ALL_CAPABILITIES,
+  type Capability,
+  type RailwayProvider,
+  type ResultEnvelope,
+} from "./types";
+
+/**
+ * Provider registry — capability → configured adapter(s), ordered.
+ *
+ * Phase 1 ships ZERO railway adapters: no authorized live provider exists yet
+ * (requirement 5). Future adapters register via `registerAdapter` after
+ * passing the terms checklist in src/providers/adapters/README.md.
+ *
+ * An adapter activates only when ALL of these hold:
+ *   1. it is registered here,
+ *   2. its id is listed in RAILWAY_PROVIDER_IDS,
+ *   3. its credential env var is present,
+ *   4. it carries a non-empty termsRef (enforced at registration).
+ */
+
+const adapters: RailwayProvider[] = [];
+
+export function registerAdapter(adapter: RailwayProvider): void {
+  if (!adapter.id.trim()) {
+    throw new Error("Adapter registration rejected: empty id.");
+  }
+  if (!adapter.termsRef.trim()) {
+    // Compliance gate (requirement 10): no terms record, no registration.
+    throw new Error(
+      `Adapter registration rejected: "${adapter.id}" has no termsRef. Record its access terms in docs/provider-terms.md first.`,
+    );
+  }
+  if (adapters.some((a) => a.id === adapter.id)) {
+    throw new Error(`Adapter registration rejected: duplicate id "${adapter.id}".`);
+  }
+  adapters.push(adapter);
+}
+
+/** Test/maintenance hook — production code should not need this. */
+export function unregisterAdapter(id: string): void {
+  const index = adapters.findIndex((a) => a.id === id);
+  if (index >= 0) adapters.splice(index, 1);
+}
+
+export function registeredAdapters(): readonly RailwayProvider[] {
+  return adapters;
+}
+
+export function resolveProviders(capability: Capability): RailwayProvider[] {
+  const ids = new Set(configuredProviderIds());
+  return adapters.filter(
+    (a) =>
+      a.capabilities.includes(capability) &&
+      ids.has(a.id) &&
+      isProviderCredentialPresent(a.id),
+  );
+}
+
+export function capabilityStatus(): {
+  capability: Capability;
+  providerIds: string[];
+  configured: boolean;
+}[] {
+  return ALL_CAPABILITIES.map((capability) => {
+    const providerIds = resolveProviders(capability).map((p) => p.id);
+    return { capability, providerIds, configured: providerIds.length > 0 };
+  });
+}
+
+/**
+ * Run a capability across every configured provider and reconcile.
+ * With zero configured providers this is the canonical NOT_CONFIGURED
+ * envelope — there is no mock-data path anywhere in production code.
+ */
+export async function executeCapability<T>(
+  capability: Capability,
+  invoke: (provider: RailwayProvider) => Promise<ResultEnvelope<T | null>>,
+  requestId: string,
+): Promise<ResultEnvelope<T | null>> {
+  const providers = resolveProviders(capability);
+  if (providers.length === 0) return notConfiguredEnvelope(capability, requestId);
+
+  const settled = await Promise.allSettled(providers.map((p) => invoke(p)));
+  const envelopes: ResultEnvelope<T | null>[] = settled.map((result, i) => {
+    if (result.status === "fulfilled") return result.value;
+    const provider = providers[i];
+    return {
+      data: null,
+      source: {
+        providerId: provider.id,
+        kind: "authorized-partner" as const,
+        termsRef: provider.termsRef,
+        authorization: "configured" as const,
+      },
+      retrievedAt: new Date().toISOString(),
+      freshness: "unknown" as const,
+      ttlSeconds: 0,
+      errors: [
+        providerError(
+          "UPSTREAM_ERROR",
+          result.reason instanceof Error
+            ? `Provider "${provider.id}" failed: ${result.reason.message}`
+            : `Provider "${provider.id}" failed.`,
+          { retryable: true },
+        ),
+      ],
+      confidence: "low" as const,
+      requestId,
+    };
+  });
+
+  return reconcileEnvelopes(capability, envelopes, requestId);
+}
