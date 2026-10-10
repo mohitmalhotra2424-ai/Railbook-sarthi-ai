@@ -29,7 +29,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run start -- -p 3100 -H 0.0.0.0",
+    // E2E must be deterministic: LLM credentials from .env.local are cleared
+    // for the test server (process env wins over .env.local in Next.js), so
+    // the assistant exercises its honest not-configured path.
+    command:
+      "env LLM_PROVIDER= LLM_MODEL= LLM_API_KEY= LLM_BASE_URL= LLM_FALLBACK_MODEL= LLM_FALLBACK_API_KEY= LLM_FALLBACK_BASE_URL= npm run start -- -p 3100 -H 0.0.0.0",
     url: "http://127.0.0.1:3100",
     reuseExistingServer: true,
     timeout: 180_000,

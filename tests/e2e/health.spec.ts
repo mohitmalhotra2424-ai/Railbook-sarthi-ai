@@ -7,7 +7,10 @@ test("/api/health exposes configuration status without secrets", async ({ reques
   const raw = await res.text();
   const json = JSON.parse(raw);
 
-  expect(json.llm.configured).toBe(false);
+  // E2E runs with LLM credentials cleared — reported honestly as null.
+  expect(json.llm.primary).toBeNull();
+  expect(json.llm.fallback).toBeNull();
+
   expect(json.booking.enabled).toBe(false);
   expect(json.booking.integrationPresent).toBe(false);
   expect(json.railway.capabilities).toHaveLength(8);
@@ -16,6 +19,5 @@ test("/api/health exposes configuration status without secrets", async ({ reques
   ).toBe(true);
 
   // No env var names or key material anywhere in the payload.
-  expect(raw).not.toMatch(/API_KEY/);
-  expect(raw).not.toMatch(/\bsk-[A-Za-z0-9_-]{8,}/);
+  expect(raw).not.toMatch(/API_KEY|nvapi-|\bsk-[A-Za-z0-9_-]{8,}/);
 });

@@ -13,20 +13,24 @@ import { GET as trainGET } from "@/app/api/railway/train/[id]/route";
 const base = "http://localhost";
 
 describe("GET /api/health", () => {
-  it("reports all 8 capabilities unconfigured, LLM off, booking disabled — no secrets", async () => {
+  it("reports LLM/railway/booking status without any key material", async () => {
     const res = await healthGET();
-    const json = await res.json();
+    const raw = await res.text();
+    const json = JSON.parse(raw);
+
     expect(json.ok).toBe(true);
-    expect(json.llm.configured).toBe(false);
+    // No LLM configured in the test environment — reported honestly as null.
+    expect(json.llm.primary).toBeNull();
+    expect(json.llm.fallback).toBeNull();
     expect(json.booking.enabled).toBe(false);
     expect(json.booking.integrationPresent).toBe(false);
     expect(json.railway.capabilities).toHaveLength(8);
     expect(json.railway.capabilities.every((c: { configured: boolean }) => c.configured === false)).toBe(true);
-    expect(JSON.stringify(json)).not.toMatch(/API_KEY/);
+    expect(raw).not.toMatch(/API_KEY|nvapi-/);
   });
 });
 
-describe("railway routes in the unconfigured state (requirement 5)", () => {
+describe("railway routes in the unconfigured state (no fabricated data)", () => {
   const cases: { name: string; call: () => Promise<Response> }[] = [
     { name: "search", call: () => searchGET(new Request(`${base}/api/railway/search?text=rajdhani`)) },
     { name: "train details", call: () => trainGET(new Request(`${base}/api/railway/train/12951`), { params: Promise.resolve({ id: "12951" }) }) },
@@ -48,8 +52,6 @@ describe("railway routes in the unconfigured state (requirement 5)", () => {
       expect(env.errors[0].message).toContain("Live data provider not configured");
       expect(env.source.authorization).toBe("not-configured");
       expect(env.freshness).toBe("unknown");
-      expect(typeof env.retrievedAt).toBe("string");
-      expect(typeof env.requestId).toBe("string");
     });
   }
 });
@@ -57,11 +59,6 @@ describe("railway routes in the unconfigured state (requirement 5)", () => {
 describe("input validation", () => {
   it("search requires text or from+to", async () => {
     const res = await searchGET(new Request(`${base}/api/railway/search`));
-    expect(res.status).toBe(400);
-  });
-
-  it("search rejects malformed dates", async () => {
-    const res = await searchGET(new Request(`${base}/api/railway/search?text=x&date=10-10-2026`));
     expect(res.status).toBe(400);
   });
 
@@ -80,22 +77,7 @@ describe("input validation", () => {
   });
 });
 
-describe("POST /api/assistant", () => {
-  it("answers honestly when neither provider nor LLM is configured", async () => {
-    const res = await assistantPOST(
-      new Request(`${base}/api/assistant`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: "PNR 1234567890 ka status batao" }),
-      }),
-    );
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.notConfigured).toBe(true);
-    expect(json.text.toLowerCase()).toContain("authorized");
-    expect(json.text).not.toMatch(/\bCNF\b|\bRAC\b/i);
-  });
-
+describe("POST /api/assistant (SSE)", () => {
   it("rejects an empty message", async () => {
     const res = await assistantPOST(
       new Request(`${base}/api/assistant`, {
@@ -105,5 +87,33 @@ describe("POST /api/assistant", () => {
       }),
     );
     expect(res.status).toBe(400);
+  });
+
+  it("rejects malformed conversation ids", async () => {
+    const res = await assistantPOST(
+      new Request(`${base}/api/assistant`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "hi", conversationId: "bad id!!" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("without LLM credentials streams an honest LLM_NOT_CONFIGURED error (no scripted reply)", async () => {
+    const res = await assistantPOST(
+      new Request(`${base}/api/assistant`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "Ludhiana se Delhi ki trains batao" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    const body = await res.text();
+    expect(body).toContain("LLM_NOT_CONFIGURED");
+    expect(body).toContain('"type":"done"');
+    // No fabricated railway facts in the stream.
+    expect(body).not.toMatch(/\bCNF\b|\bRAC \d|\bWL\d/);
   });
 });

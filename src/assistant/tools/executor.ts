@@ -1,0 +1,263 @@
+import { z } from "zod";
+import { logger } from "@/lib/logger";
+import { isNotConfigured } from "@/providers/envelope";
+import { executeCapability } from "@/providers/registry";
+import type {
+  CancellationsProvider,
+  FareProvider,
+  LiveStatusProvider,
+  PnrProvider,
+  QueryContext,
+  ResultEnvelope,
+  SeatAvailabilityProvider,
+  TimetableProvider,
+  TrainDetailsProvider,
+  TrainSearchProvider,
+} from "@/providers/types";
+import { TOOL_ARG_SCHEMAS, type ToolName } from "./schemas";
+import type { ToolResult, ToolResultStatus } from "./results";
+
+/**
+ * Tool executor — a deterministic technical boundary ONLY (requirement 1):
+ * schema validation, timeouts, correlation, provider invocation and honest
+ * status mapping. It performs NO intent interpretation and never decides
+ * which tool to run — that is exclusively the LLM's decision.
+ */
+
+export interface ToolExecutionMeta {
+  conversationId: string;
+  turnId: string;
+  toolCallId: string;
+  signal?: AbortSignal;
+}
+
+const TOOL_TIMEOUT_MS = 15_000;
+
+const NOTES: Record<ToolResultStatus, string> = {
+  ok: "Live provider data. Report exactly what is here; add nothing.",
+  not_configured:
+    "No authorized live railway provider is configured for this lookup. Tell the user honestly that live data is unavailable right now. Do NOT invent trains, fares, timings, availability or statuses.",
+  unavailable:
+    "The provider returned no usable data. Say it is unavailable; do not guess.",
+  stale: "Data returned but it is stale. Mention that it may be outdated, or offer to re-check.",
+  invalid_arguments:
+    "Arguments failed validation and the tool did NOT run. Fix the arguments and retry, or ask the user for the missing detail.",
+  timeout: "The provider timed out. Offer to retry; do not guess results.",
+  error: "Technical provider failure. Offer to retry; do not guess results.",
+};
+
+function baseResult(tool: string, meta: ToolExecutionMeta, status: ToolResultStatus, note?: string): ToolResult {
+  return {
+    tool,
+    correlationId: `${meta.conversationId}:${meta.turnId}:${meta.toolCallId}`,
+    status,
+    note: note ?? NOTES[status],
+  };
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, signal?: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`TOOL_TIMEOUT after ${ms}ms`)), ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new Error("ABORTED"));
+      },
+      { once: true },
+    );
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+function mapEnvelope<T>(
+  tool: string,
+  meta: ToolExecutionMeta,
+  envelope: ResultEnvelope<T | null>,
+  extra: { journeyDate?: string; classCode?: string } = {},
+): ToolResult {
+  const base = {
+    tool,
+    correlationId: `${meta.conversationId}:${meta.turnId}:${meta.toolCallId}`,
+    source: {
+      providerId: envelope.source.providerId,
+      authorization: envelope.source.authorization,
+    },
+    retrievedAt: envelope.retrievedAt,
+    freshness: envelope.freshness,
+    ...extra,
+  };
+
+  if (isNotConfigured(envelope)) {
+    return { ...base, status: "not_configured", note: NOTES.not_configured, errors: envelope.errors };
+  }
+  if (envelope.data === null) {
+    return {
+      ...base,
+      status: envelope.errors.length ? "error" : "unavailable",
+      note: envelope.errors.length ? NOTES.error : NOTES.unavailable,
+      errors: envelope.errors,
+    };
+  }
+  if (envelope.freshness === "stale") {
+    return { ...base, status: "stale", note: NOTES.stale, data: envelope.data, errors: envelope.errors };
+  }
+  // RAC / WL / REGRET / "no seats" live inside `data` — they are VALID
+  // outcomes and stay status "ok" by design.
+  return { ...base, status: "ok", note: NOTES.ok, data: envelope.data, errors: envelope.errors };
+}
+
+export async function executeTool(
+  tool: ToolName,
+  rawArgs: Record<string, unknown> | null,
+  rawArguments: string | undefined,
+  meta: ToolExecutionMeta,
+): Promise<ToolResult> {
+  // 1) Validation boundary — before ANY execution.
+  const schema = TOOL_ARG_SCHEMAS[tool];
+  if (rawArgs === null) {
+    return {
+      ...baseResult(tool, meta, "invalid_arguments"),
+      note: `Model emitted unparseable arguments JSON${rawArguments ? `: ${rawArguments.slice(0, 200)}` : ""}. ${NOTES.invalid_arguments}`,
+    };
+  }
+  const parsed = schema.safeParse(rawArgs);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .slice(0, 5)
+      .join("; ");
+    return {
+      ...baseResult(tool, meta, "invalid_arguments"),
+      note: `Validation failed — ${issues}. ${NOTES.invalid_arguments}`,
+    };
+  }
+  const args = parsed.data as Record<string, unknown>;
+
+  // 2) GENERAL_RAILWAY_ANSWER performs no external calls (provenance marker).
+  if (tool === "GENERAL_RAILWAY_ANSWER") {
+    return {
+      ...baseResult(tool, meta, "ok"),
+      note: "General-knowledge answer path. Answer the user's question from railway knowledge in their language; make clear it is general information, not live data.",
+      data: { kind: "general_knowledge", question: (args as { question: string }).question },
+    };
+  }
+
+  // 3) Provider invocation with timeout + abort propagation.
+  const requestId = `${meta.turnId}:${meta.toolCallId}`;
+  const ctx: QueryContext = { locale: "en", requestId };
+  try {
+    switch (tool) {
+      case "SEARCH_TRAINS": {
+        const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.SEARCH_TRAINS>;
+        const env = await withTimeout(
+          executeCapability("trainSearch", (p) => (p as TrainSearchProvider).search(a, ctx), requestId),
+          TOOL_TIMEOUT_MS,
+          meta.signal,
+        );
+        return mapEnvelope(tool, meta, env, { journeyDate: a.date });
+      }
+      case "GET_TRAIN_INFO": {
+        const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.GET_TRAIN_INFO>;
+        const env = await withTimeout(
+          executeCapability("trainDetails", (p) => (p as TrainDetailsProvider).details(a.trainNumber, ctx), requestId),
+          TOOL_TIMEOUT_MS,
+          meta.signal,
+        );
+        return mapEnvelope(tool, meta, env);
+      }
+      case "GET_TIMETABLE": {
+        const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.GET_TIMETABLE>;
+        const env = await withTimeout(
+          executeCapability("timetable", (p) => (p as TimetableProvider).timetable(a.trainNumber, a.date, ctx), requestId),
+          TOOL_TIMEOUT_MS,
+          meta.signal,
+        );
+        return mapEnvelope(tool, meta, env, { journeyDate: a.date });
+      }
+      case "TRACK_TRAIN": {
+        const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.TRACK_TRAIN>;
+        const env = await withTimeout(
+          executeCapability("liveStatus", (p) => (p as LiveStatusProvider).liveStatus(a.trainNumber, a.date, ctx), requestId),
+          TOOL_TIMEOUT_MS,
+          meta.signal,
+        );
+        return mapEnvelope(tool, meta, env, { journeyDate: a.date });
+      }
+      case "CHECK_AVAILABILITY": {
+        const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.CHECK_AVAILABILITY>;
+        const env = await withTimeout(
+          executeCapability(
+            "seatAvailability",
+            (p) =>
+              (p as SeatAvailabilityProvider).availability(
+                { trainId: a.trainNumber, date: a.date, from: a.from, to: a.to, classCode: a.classCode },
+                ctx,
+              ),
+            requestId,
+          ),
+          TOOL_TIMEOUT_MS,
+          meta.signal,
+        );
+        return mapEnvelope(tool, meta, env, { journeyDate: a.date, classCode: a.classCode });
+      }
+      case "GET_FARE": {
+        const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.GET_FARE>;
+        const env = await withTimeout(
+          executeCapability(
+            "fare",
+            (p) =>
+              (p as FareProvider).fare(
+                { trainId: a.trainNumber, from: a.from, to: a.to, classCode: a.classCode, quota: a.quota },
+                ctx,
+              ),
+            requestId,
+          ),
+          TOOL_TIMEOUT_MS,
+          meta.signal,
+        );
+        return mapEnvelope(tool, meta, env, { classCode: a.classCode });
+      }
+      case "CHECK_PNR": {
+        const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.CHECK_PNR>;
+        const env = await withTimeout(
+          executeCapability("pnr", (p) => (p as PnrProvider).pnr(a.pnr, ctx), requestId),
+          TOOL_TIMEOUT_MS,
+          meta.signal,
+        );
+        return mapEnvelope(tool, meta, env);
+      }
+      case "GET_CANCELLED_TRAINS": {
+        const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.GET_CANCELLED_TRAINS>;
+        const env = await withTimeout(
+          executeCapability("cancellations", (p) => (p as CancellationsProvider).cancellations(a, ctx), requestId),
+          TOOL_TIMEOUT_MS,
+          meta.signal,
+        );
+        return mapEnvelope(tool, meta, env, { journeyDate: a.date });
+      }
+      default: {
+        const exhaustive: never = tool;
+        return baseResult(exhaustive as string, meta, "error", "Unknown tool.");
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === "ABORTED") throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    const timedOut = message.startsWith("TOOL_TIMEOUT");
+    logger.warn("tool execution failed", { tool, correlationId: `${meta.turnId}:${meta.toolCallId}`, error: message });
+    return {
+      ...baseResult(tool, meta, timedOut ? "timeout" : "error"),
+      errors: [{ code: timedOut ? "TIMEOUT" : "UPSTREAM_ERROR", message, retryable: true }],
+    };
+  }
+}

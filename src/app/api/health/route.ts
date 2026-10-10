@@ -1,29 +1,25 @@
-import { getLlmAdapter, selectedLlmProviderId } from "@/assistant/llm/client";
+import { describeLlmConfigs } from "@/assistant/llm/config";
 import { bookingEnabled, describeProviderConfig } from "@/providers/config";
 import { capabilityStatus, registeredAdapters } from "@/providers/registry";
 import { jsonResponse } from "@/lib/http";
 
 /**
  * GET /api/health — configuration status WITHOUT secret values.
- * Lists every capability and whether an authorized provider serves it.
+ * LLM section exposes provider/model/baseUrl only — never key material.
  */
 export async function GET(): Promise<Response> {
-  const selected = selectedLlmProviderId();
   return jsonResponse({
     ok: true,
     generatedAt: new Date().toISOString(),
-    llm: {
-      selectedProvider: selected ?? "none",
-      configured: getLlmAdapter() !== null,
-    },
+    llm: describeLlmConfigs(),
     railway: {
       providers: describeProviderConfig(),
       registeredAdapters: registeredAdapters().map((a) => a.id),
       capabilities: capabilityStatus(),
     },
     booking: {
-      // Requirement 9: enabled flag AND a registered integration are both
-      // required; Phase 1 has no BookingProvider implementation at all.
+      // Requirement: booking stays disabled until an authorized integration
+      // exists AND is explicitly enabled. Phase status: interface-only.
       enabled: bookingEnabled(),
       integrationPresent: false,
     },

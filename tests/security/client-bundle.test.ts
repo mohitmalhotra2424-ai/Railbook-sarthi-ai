@@ -15,9 +15,11 @@ const FORBIDDEN: { pattern: RegExp; label: string }[] = [
   { pattern: /\bsk-ant-[A-Za-z0-9_-]{8,}/, label: "anthropic-style key" },
   { pattern: /\bsk-[A-Za-z0-9_-]{8,}/, label: "openai-style key" },
   { pattern: /\bAIza[0-9A-Za-z_-]{16,}/, label: "google-style key" },
+  { pattern: /\bnvapi-[A-Za-z0-9_-]{20,}/, label: "nvidia-style key" },
   { pattern: /OPENAI_API_KEY/, label: "OPENAI_API_KEY reference" },
   { pattern: /ANTHROPIC_API_KEY/, label: "ANTHROPIC_API_KEY reference" },
   { pattern: /GEMINI_API_KEY/, label: "GEMINI_API_KEY reference" },
+  { pattern: /LLM_API_KEY|LLM_FALLBACK_API_KEY/, label: "LLM key env reference" },
   { pattern: /RAILWAY_PROVIDER_[A-Z0-9_]*_KEY/, label: "railway credential reference" },
 ];
 

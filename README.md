@@ -1,14 +1,19 @@
 # रेलसारथी · RailSaarthi AI
 
-Honest railway assistant for India — **Hindi, Hinglish and English**.
-Live railway facts come only from **authorized data providers**, and every
-answer is labelled with its **source, retrieval timestamp and freshness**.
-When no provider is configured, the app says exactly that:
-**“Live data provider not configured.”** — it never guesses.
+Honest, **LLM-first** railway assistant for India — **Hindi, Hinglish and English**.
+The LLM is the sole conversational brain: it decides when to answer, when to
+clarify, and which railway tools to call. Live railway facts come only from
+**authorized data providers**, and every tool result carries its **source,
+retrieval timestamp, freshness and correlation id**. When no provider is
+configured, the app says exactly that — it never guesses, and there is no
+mock model anywhere.
 
-> **Phase 1 status:** foundation complete. No live railway provider is
-> authorized/configured yet, and booking/payment/ticket issuance is disabled
-> by design. See `PLAN.md` for the reviewed plan and `docs/` for details.
+> **Phase 2 status:** LLM-first foundation complete and live-verified with
+> NVIDIA `meta/muse-glimmer-30b` (primary) and `openai/gpt-oss-20b`
+> (configured fallback) — both tested with real credentials including
+> structured tool calling. No railway provider is authorized yet (see
+> `docs/provider-terms.md`), so live lookups return honest not-configured
+> states. Booking/payment stays disabled by design.
 
 ---
 
@@ -17,7 +22,8 @@ When no provider is configured, the app says exactly that:
 | # | Requirement | Mechanism |
 |---|---|---|
 | 1 | Mobile-first navy/off-white UI | Tailwind v4 tokens (`src/app/globals.css`), 360px-first layouts, Devanagari font |
-| 2 | Hindi/Hinglish/English assistant | `src/assistant/intents.ts` locale detection + tri-lingual strings (`src/lib/i18n.ts`); optional LLM for conversational phrasing only |
+| 1b | LLM-first conversation (no rules engine) | `src/assistant/orchestrator.ts` agentic loop; `intents.ts`/scripted replies deleted; structure tests enforce their absence |
+| 2 | Hindi/Hinglish/English assistant | LLM mirrors the user's language naturally (system prompt); verified live with Hinglish/Hindi turns |
 | 3 | Replaceable provider layer | `src/providers/*` — adapters are plugins behind capability interfaces |
 | 4 | 8 capability interfaces | search, details, timetable, live status, availability, fare, PNR, cancellations (`src/providers/types.ts`) |
 | 5 | No mock data in live mode | Zero adapters ship in Phase 1; fixtures live only under `tests/`; canonical `NOT_CONFIGURED` envelope everywhere |
@@ -31,7 +37,9 @@ When no provider is configured, the app says exactly that:
 
 Next.js 16 (App Router, TS strict) · React 19 · Tailwind CSS v4 · Zod ·
 TanStack Query · Vitest + Testing Library · Playwright (mobile E2E) ·
-LLM adapters: OpenAI, Anthropic, Gemini (server-side, env-driven).
+LLM: any OpenAI-compatible endpoint via `LLM_*` env (verified: NVIDIA
+`meta/muse-glimmer-30b`, fallback `openai/gpt-oss-20b`), streamed to the UI
+over SSE with per-tool progress events.
 
 ## Commands
 
@@ -47,15 +55,21 @@ npm run verify       # lint + typecheck + build + unit + e2e
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in ONLY what you are authorized to
-use. All variables are server-side only:
+Copy `.env.example` to `.env.local` (git-ignored) and fill in ONLY what you
+are authorized to use. All variables are server-side only:
 
-- `LLM_PROVIDER` — `openai` | `anthropic` | `gemini` | `disabled`
-  (+ the matching `*_API_KEY`, optional `*_MODEL`, `OPENAI_BASE_URL`)
+- `LLM_PROVIDER` / `LLM_MODEL` / `LLM_API_KEY` / `LLM_BASE_URL` (+ optional
+  `LLM_TIMEOUT_MS`) — any OpenAI-compatible endpoint.
+- `LLM_FALLBACK_*` — optional fallback; used only when configured, and every
+  switch is surfaced to the user (never silent, never mock).
 - `RAILWAY_PROVIDER_IDS` — comma-separated adapter ids; each needs
   `RAILWAY_PROVIDER_<ID_UPPER_SNAKE>_KEY` **and** a record in
   `docs/provider-terms.md` before it can register.
-- `BOOKING_ENABLED` — leave unset; see requirement 9.
+- `BOOKING_ENABLED` — leave unset; booking is disabled until an authorized
+  integration exists.
+
+`scripts/smoke-live.mjs` runs a real end-to-end conversation against a
+running server (manual verification tool, not CI).
 
 ## Adding a railway data provider
 

@@ -1,98 +1,122 @@
-# RailSaarthi AI — Architecture (Phase 1)
+# RailSaarthi AI — Architecture (Phase 2: LLM-first)
 
-## Layers
+## The non-negotiable core
+
+**The LLM is the sole conversational interpreter, planner and railway-tool
+orchestrator.** There is no intent-detection regex, no dialogue state machine,
+no scripted replies, no fixed tool chain, and no mock model anywhere.
+Deterministic code exists ONLY at technical/safety boundaries: schema
+validation, tool execution, timeouts, correlation, provider-response
+validation, freshness metadata, secret protection, and prevention of
+unsupported factual claims.
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│ UI (mobile-first, navy/off-white)                          │
-│  pages: / /chat /trains /trains/[id] /pnr/[pnr] /disruptions│
-│  components: EnvelopePanel · SourceBadge · FreshnessPill   │
-│              NotConfiguredBanner · ChatClient · SearchForm │
-├────────────────────────────────────────────────────────────┤
-│ API routes (server-only)  src/app/api/**                   │
-│  /assistant  /health  /railway/{search,train,timetable,    │
-│               live-status,availability,fare,pnr,           │
-│               cancellations}                               │
-│  → every response is a ResultEnvelope (Zod-validated)      │
-├────────────────────────────────────────────────────────────┤
-│ Assistant  src/assistant/**                                │
-│  intents (hi/hinglish/en, rule-based) → registry calls     │
-│  grounding.ts = ONLY path from data to text                │
-│  llm/ = OpenAI/Anthropic/Gemini adapters (env keys)        │
-│  LLM is used ONLY for greeting/unknown phrasing — never    │
-│  for railway facts                                         │
-├────────────────────────────────────────────────────────────┤
-│ Provider layer  src/providers/**                           │
-│  types.ts      8 capability interfaces + ResultEnvelope    │
-│  registry.ts   capability → configured adapters            │
-│  reconcile.ts  multi-source merge + contradiction flags    │
-│  envelope.ts   ok/error/not-configured builders            │
-│  config.ts     env metadata only (never values)            │
-│  adapters/     (empty in Phase 1 — none authorized)        │
-├────────────────────────────────────────────────────────────┤
-│ Domain  src/domain/** — Zod schemas + typed errors         │
-│ Lib     src/lib/**    — time, redacting logger, i18n, http │
-└────────────────────────────────────────────────────────────┘
+User (mobile browser)
+  │  POST /api/assistant  { conversationId, message }
+  ▼
+SSE route ──► ORCHESTRATOR (src/assistant/orchestrator.ts)
+  │              │  loop ≤ 6 iterations:
+  │              │   1. build messages = system prompt + CONTEXT block + pruned history
+  │              │   2. LLM chat + 9 tool schemas  (OpenAI-compatible, server-side keys)
+  │              │   3. model decides: answer | clarify | call tools (1..n) | explain
+  │              │   4. tool calls → VALIDATE (Zod) → execute → ToolResult → back to model
+  │              ▼
+  │        TOOL EXECUTOR (src/assistant/tools/executor.ts)
+  │              │  correlation ids, timeouts, honest status mapping
+  │              ▼
+  │        PROVIDER LAYER (src/providers/*)  — ResultEnvelope, reconcile, registry
+  │              │  adapters: NONE authorized in Phase 2 → honest not_configured
+  ▼
+Events streamed to UI: status · tool_call · tool_result · message(+cards) · error
 ```
 
-## The ResultEnvelope contract
+## Conversational decision-making (requirement 1 & 2)
 
-Every railway answer — page or API — is wrapped:
+The model receives, every turn:
+1. **System prompt** (`prompts.ts`): language mirroring, grounding absolutes
+   (live facts only from tool results; RAC/WL/REGRET are valid outcomes;
+   never invent; booking disabled), tool-use guidance (resolve references,
+   re-run tools after date/route changes, GENERAL_RAILWAY_ANSWER for
+   knowledge questions).
+2. **CONTEXT block** (`context/store.ts`): TODAY's date, journey context
+   (route/date/train/class), and compact result refs `[r1] SEARCH_TRAINS
+   LDH→NDLS date=… status=… items: 1) … 2) …` with explicit SUPERSEDED marks.
+3. **Pruned message history** (≤16 messages; structured context carries the
+   rest — history is never sent unbounded).
 
-```ts
-interface ResultEnvelope<T> {
-  data: T | null;              // null = unavailable (never fabricated)
-  source: SourceInfo;          // providerId, kind, termsRef, authorization
-  retrievedAt: string;         // OUR server clock, ISO-8601
-  freshness: Freshness;        // computed from retrievedAt + ttlSeconds
-  ttlSeconds: number;
-  errors: ProviderError[];     // typed codes, UI-safe messages
-  confidence: "high" | "medium" | "low";
-  contradictions?: Contradiction[];  // sources disagreed — both kept
-  requestId: string;
-}
-```
+Everything conversational — language, clarifications, reference resolution
+("doosri wali"), date correction ("parso"), whether to call a tool at all —
+is the model's decision, verified live (see `scripts/smoke-live.mjs` runs in
+the phase report).
 
-Invariants are enforced by `tests/contract/` against every adapter output:
-shape validity, derived freshness, termsRef on configured sources, no
-credentials in error messages.
+## Conversation memory & turn management (requirement 3)
 
-## Data-flow guarantees
+- Stable `conversationId` (client-generated, persisted in localStorage;
+  server validates format and can issue one).
+- Server-side `ConversationStore`: LRU (200 convs), TTL 2h, ≤16 messages,
+  ≤8 result refs. In-memory for this phase; interface-ready for Redis/DB.
+- **Invalidation:** a new SEARCH/AVAILABILITY run for a different date or
+  route marks earlier refs SUPERSEDED (with reason) — the model is told not
+  to use them as current.
+- **Stale-turn guard:** `recordToolResult` rejects results whose turnId is
+  not the conversation's current turn — a late tool result from an
+  interrupted turn can never overwrite a newer correction.
+- **Duplicate-call guard:** identical tool+args within one turn is answered
+  from the first execution instead of re-running.
 
-1. **No provider configured** → `notConfiguredEnvelope()` → UI shows
-   “Live data provider not configured.” (single canonical copy in i18n).
-2. **One provider** → its envelope passes through, re-validated by Zod at
-   the route boundary; parse failure downgrades to `data: null`.
-3. **Multiple providers** → `reconcileEnvelopes()` compares normalized
-   fields per capability; agreement → `confidence: high`; disagreement →
-   both values kept in `contradictions`, `confidence: low`, UI shows an
-   uncertainty notice. Nothing is averaged or silently resolved.
-4. **Assistant text** is rendered only from `envelope.data` fields by
-   `grounding.ts`. The LLM (when configured) sees no railway data and may
-   only re-phrase greetings; data answers are deterministic.
+## LLM integration (requirement 4)
 
-## Security posture
+- Generic **OpenAI-compatible client** (`llm/client.ts`) configured by
+  `LLM_PROVIDER/LLM_MODEL/LLM_API_KEY/LLM_BASE_URL` (+`LLM_TIMEOUT_MS`).
+  Provider/model are replaceable with zero conversation-logic changes.
+- **Primary (verified live 2026-10-10):** NVIDIA `meta/muse-glimmer-30b` via
+  `https://integrate.api.nvidia.com/v1` — plain chat AND structured tool
+  calling both verified with real credentials.
+- **Fallback (verified live 2026-10-10):** NVIDIA `openai/gpt-oss-20b` —
+  tool calling verified. Used only because it is explicitly configured, and
+  every switch emits a `using_fallback` event + `viaFallback` on the message
+  (never silent).
+- Structured tool calls; arguments Zod-validated before execution
+  (number→string coercion for trainNumber/PNR, then regex enforced).
+- Malformed output, 429s, 4xx/5xx and timeouts are distinct honest error
+  events; NO mock model exists in any code path; when nothing is configured
+  the turn returns `LLM_NOT_CONFIGURED`.
 
-- Env access is restricted by ESLint to `src/app/api/**`,
-  `src/providers/**`, `src/assistant/**`, `src/lib/logger.ts`.
-- `lib/logger.ts` redacts every credential-like env value and
-  secret-shaped token from log lines.
-- `tests/security/client-bundle.test.ts` scans the built client JS for key
-  patterns and server env names (runs after `npm run build`).
-- Gemini key travels in the `x-goog-api-key` header, never in a URL.
-- `.env*` is git-ignored; `.env.example` documents names only.
+## Railway tool system (requirements 5 & 6)
 
-## Booking gate (requirement 9)
+Nine tools: SEARCH_TRAINS, GET_TRAIN_INFO, GET_TIMETABLE, TRACK_TRAIN,
+CHECK_AVAILABILITY, GET_FARE, CHECK_PNR, GET_CANCELLED_TRAINS,
+GENERAL_RAILWAY_ANSWER (provenance marker; makes no external call).
 
-`BOOKING_ENABLED=true` is necessary but not sufficient: booking also
-requires a registered `BookingProvider` implementation, and Phase 1 ships
-the interface only, with a mandatory terms record. UI states the disabled
-status; no payment SDK is installed.
+Every `ToolResult` carries: `tool`, `correlationId`
+(conversation:turn:toolCall), `status` (ok | not_configured | unavailable |
+stale | invalid_arguments | timeout | error), `note` (grounding instruction
+to the model), `source`, `retrievedAt`, `freshness`, `journeyDate`,
+`classCode`, `data`, `errors`. RAC/WL/REGRET arrive as `status: ok` data —
+they are valid outcomes, never technical failures.
 
-## Rendering model
+Provider layer (unchanged from Phase 1): `ResultEnvelope` with source /
+retrievedAt / computed freshness / errors / contradictions; multi-source
+conflicts preserved, never averaged. **Zero adapters ship** — see
+`provider-terms.md` for the researched verdicts (ConfirmTkt/eRail
+unofficial endpoints prohibited; B2B authorization required). Caching never
+blocks freshness: repeated enquiries re-invoke tools (the model decides),
+and freshness is computed per retrieval.
 
-Live-data pages (`/trains/[id]`, `/pnr/[pnr]`, `/disruptions`) are
-`force-dynamic` — rendered per request so `retrievedAt`/`freshness` are
-always truthful. Next 16 `cacheComponents` is disabled for that reason
-(documented in `next.config.ts`); revisit with per-section Suspense caching
-in Phase 2.
+## UI (requirement 7)
+
+Mobile-first navy/off-white. Chat streams SSE events: thinking dots,
+per-tool chips (running → ✓/⚠ with status+freshness), train result cards,
+error bubbles with retry, model provenance line under each answer
+(`model: meta/muse-glimmer-30b`, `· via configured fallback` when used).
+Voice-ready: speech can be added later by speaking the exact verified
+`message` text — no second intent engine needed.
+
+## Booking & security (requirements 8 & 9)
+
+Booking/payment/OTP/issuance disabled (`BOOKING_ENABLED` + no
+`BookingProvider` implementation; health reports both). `.env.local`
+git-ignored; `.env.example` placeholders only; ESLint bans `process.env`
+outside server dirs; redacting logger; post-build client-bundle scan now
+also covers `nvapi-` keys and `LLM_API_KEY` references; health exposes
+provider/model/baseUrl only — never key material.
