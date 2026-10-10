@@ -24,7 +24,7 @@ export default async function DisruptionsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
       <header>
-        <h1 className="text-lg font-bold text-navy-900">
+        <h1 className="text-xl font-bold tracking-tight text-navy-900">
           Cancellations &amp; diversions{" "}
           <span className="text-navy-400">· रद्द ट्रेनें</span>
         </h1>

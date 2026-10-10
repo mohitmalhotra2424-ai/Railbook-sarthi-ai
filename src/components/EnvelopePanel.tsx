@@ -27,10 +27,10 @@ export function EnvelopePanel<T>({
   return (
     <section
       aria-label={title}
-      className="rounded-3xl border border-cream-300 bg-cream-50 p-4 shadow-sm sm:p-5"
+      className="rounded-2xl border border-cream-300 bg-white p-4 sm:p-5"
     >
       <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold tracking-wide text-navy-900 uppercase">{title}</h2>
+        <h2 className="text-sm font-bold text-navy-900">{title}</h2>
         <div className="flex flex-wrap items-center gap-2">
           <SourceBadge source={envelope.source} />
           <FreshnessPill freshness={envelope.freshness} retrievedAt={envelope.retrievedAt} />

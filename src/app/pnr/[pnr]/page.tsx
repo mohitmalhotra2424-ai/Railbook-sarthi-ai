@@ -32,7 +32,7 @@ export default async function PnrPage({
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
       <header>
-        <h1 className="text-lg font-bold text-navy-900">
+        <h1 className="text-xl font-bold tracking-tight text-navy-900">
           PNR {pnrClean} <span className="text-navy-400">· PNR स्थिति</span>
         </h1>
         <p className="mt-0.5 text-xs text-navy-600">
