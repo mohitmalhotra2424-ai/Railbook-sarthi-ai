@@ -9,7 +9,7 @@ adapters with an empty `termsRef` (convention: `docs/provider-terms.md#<anchor>`
 | Anchor / Provider id | Kind | API & docs URL | Terms URL | Permitted use (summary) | Rate limits | Credential via | Authorized by | Date |
 |---|---|---|---|---|---|---|---|---|
 | `#confirmtkt-v1` | Unofficial web-app endpoints (owner-directed) | `https://cttrainsapi.confirmtkt.com/api/v1/trains/search` + `/api/v2/trains/stations/auto-suggestion` (no public docs; contract reverse-documented by github.com/uditya-kumar/confirmtkt-mcp) | none published | Train search, seat availability, fares, station lookup — display in this app | None published; we self-limit: 60 s search cache, 24 h station cache, 15 s timeout | None (keyless; `clientid`/`apikey` are static public constants from ConfirmTkt's own JS bundle, not per-user secrets) | **Owner, explicit instruction 2026-10-10** ("scrape confirmtkt for seat availability, station lookup, fare") | 2026-10-10 |
-| `#erail-v1` | Unofficial site data endpoint (owner-directed fallback) | `https://erail.in/rail/getTrains.aspx` (tab-separated; no public docs) | none published | Train-search FALLBACK only, used when confirmtkt-v1 fails | Throttles datacenter IPs ("Please try again after some time"); we self-limit: 1 h cache; throttle → honest RATE_LIMITED | None (keyless) | **Owner, explicit instruction 2026-10-10** ("if not available then scrape data from railyatri or erail") | 2026-10-10 |
+| `#erail-v1` | Unofficial site data endpoints (owner-directed fallback) | `https://erail.in/rail/getTrains.aspx` (~/^ delimited feed), `https://erail.in/train-fare/<no>` (SSR table), `https://erail.in/js/cmp/stations.js` (static station table) — no public docs | none published | Train-search + fare FALLBACK and station lookup, used when confirmtkt-v1 fails | Throttles occasionally ("Please try again after some time"); we self-limit: 1 h TBS cache, 6 h fare/station cache; throttle → honest RATE_LIMITED | None (keyless) | **Owner, explicit instruction 2026-10-10** ("if not available then scrape data from railyatri or erail"; endpoint details supplied by owner same day) | 2026-10-10 |
 
 ### Owner decision of 2026-10-10 (supersedes the "no source authorized" conclusion below)
 
@@ -24,8 +24,12 @@ as fallbacks. Recorded caveats, kept visible on purpose:
   use the sites' own public web clients.
 - **RailYatri was investigated and NOT wired**: its former public
   trains-between-stations pages now 404/301 (probed 2026-10-10) and its data
-  APIs are B2B-only, so eRail is the implemented fallback. RailYatri can be
-  added later if a partner key is obtained.
+  APIs are B2B-only, so eRail is the implemented fallback. UPDATE (same day,
+  owner supplied `sa.railyatri.in/api/v3/seat/availability/...`): probed live —
+  every `user_id` variant (owner's `-2345434`, `-1`, `0`, absent) returns
+  `{"success":false,"message":"Invalid User Id."}`. The endpoint needs a
+  valid RailYatri session user id which we do not have and will not guess;
+  wiring resumes the moment a working id is supplied.
 - If either site objects or blocks us, remove its id from
   `RAILWAY_PROVIDER_IDS` — the app degrades to honest not-configured answers.
 

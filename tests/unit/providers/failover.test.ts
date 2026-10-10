@@ -85,11 +85,11 @@ describe("credential-free activation (keyless public endpoints)", () => {
     expect(confirmtktAdapter.credentialRequired).toBe(false);
   });
 
-  it("erail-v1 stays a trainSearch-only fallback, ordered after the primary", () => {
+  it("erail-v1 is a search+fare fallback (never availability), ordered after the primary", () => {
     vi.stubEnv("RAILWAY_PROVIDER_IDS", "erail-v1");
     expect(resolveProviders("trainSearch").map((p) => p.id)).toContain("erail-v1");
+    expect(resolveProviders("fare").map((p) => p.id)).toContain("erail-v1");
     expect(resolveProviders("seatAvailability").map((p) => p.id)).not.toContain("erail-v1");
-    expect(resolveProviders("fare").map((p) => p.id)).not.toContain("erail-v1");
     expect(erailAdapter.priority).toBeGreaterThan(confirmtktAdapter.priority ?? 100);
   });
 });
