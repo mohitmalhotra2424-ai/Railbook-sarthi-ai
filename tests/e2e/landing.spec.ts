@@ -8,8 +8,8 @@ test("homepage explains the product with CTA, features and honesty promises at 3
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Your Journey,");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Simplified.");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Plan. Track. Travel.");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("With Your AI Sarthi.");
   await expect(
     page.getByText("Ask anything about Indian Railways in Hindi, Hinglish or English"),
   ).toBeVisible();

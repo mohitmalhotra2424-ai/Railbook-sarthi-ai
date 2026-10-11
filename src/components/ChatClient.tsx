@@ -470,6 +470,39 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* Compact chat header: identity + home + reset — fixed above the log */}
+      <div className="px-4 pt-3 sm:px-6">
+        <div className="flex items-center justify-between gap-2 rounded-2xl bg-navy-900 px-2.5 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Link
+              href="/"
+              aria-label="Back to home"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            >
+              <HomeIcon className="h-4 w-4" />
+            </Link>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[13px] font-bold text-white">RailSaarthi AI</p>
+              <p className="truncate text-[10px] font-medium text-navy-200">Railway Assistant</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            data-testid="new-chat"
+            aria-label="Start a new conversation"
+            onClick={() => (confirmReset ? (setConfirmReset(false), newConversation()) : armConfirm())}
+            disabled={messages.length === 0}
+            className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition disabled:opacity-40 ${
+              confirmReset
+                ? "border-alert-500/40 bg-alert-500/10 text-alert-500"
+                : "border-white/20 bg-white/10 text-white hover:border-white/40"
+            }`}
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+            {confirmReset ? "Confirm new chat?" : "New chat"}
+          </button>
+        </div>
+      </div>
       {/* Conversation surface */}
       <div className="relative min-h-0 flex-1">
         <div
@@ -481,38 +514,6 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
           onScroll={onLogScroll}
           className="h-full space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
         >
-          {/* Compact chat header: identity + home + reset */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <Link
-                href="/"
-                aria-label="Back to home"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-navy-700 shadow-sm transition hover:bg-navy-50"
-              >
-                <HomeIcon className="h-4 w-4" />
-              </Link>
-              <div className="min-w-0 leading-tight">
-                <p className="truncate text-[13px] font-bold text-navy-900">RailSaarthi AI</p>
-                <p className="truncate text-[10px] font-medium text-navy-500">Railway Assistant</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              data-testid="new-chat"
-              aria-label="Start a new conversation"
-              onClick={() => (confirmReset ? (setConfirmReset(false), newConversation()) : armConfirm())}
-              disabled={messages.length === 0}
-              className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition disabled:opacity-40 ${
-                confirmReset
-                  ? "border-alert-500/40 bg-alert-500/10 text-alert-500"
-                  : "border-cream-300 bg-white text-navy-700 hover:border-navy-300"
-              }`}
-            >
-              <PlusIcon className="h-3.5 w-3.5" />
-              {confirmReset ? "Confirm new chat?" : "New chat"}
-            </button>
-          </div>
-
           {messages.length === 0 && (
             <div className="pt-2 pb-2 sm:pt-6">
               <div className="rounded-2xl border border-cream-300 bg-navy-50 p-4">

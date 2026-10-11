@@ -168,3 +168,11 @@ export function InfoIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function ChatIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5.5h16v10H9l-5 4v-14Z" />
+    </svg>
+  );
+}
