@@ -65,6 +65,11 @@ export type TurnEvent =
       classCode?: string;
     }
   | { type: "message"; text: string; model: string; viaFallback: boolean; cards: TrainCard[]; blocks: ResultBlock[] }
+  | {
+      type: "passenger_form";
+      selection: import("./context/store").SelectionState | null;
+      passengers: import("./context/store").PassengerDraft[];
+    }
   | { type: "error"; code: string; message: string; retryable: boolean };
 
 export interface RunTurnParams {
@@ -320,7 +325,7 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
         call.name as never,
         call.args,
         call.rawArguments,
-        { conversationId: conv.id, turnId, toolCallId: call.id, signal: params.signal },
+        { conversationId: conv.id, turnId, toolCallId: call.id, signal: params.signal, store },
       );
       executedCalls.set(argsKey, correlationId);
       turnResults.push(result);
@@ -337,6 +342,19 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
         ...(result.journeyDate ? { journeyDate: result.journeyDate } : {}),
         ...(result.classCode ? { classCode: result.classCode } : {}),
       };
+
+      // Prompt 25: keep the UI's selection/passenger-form state authoritative.
+      if (
+        result.status === "ok" &&
+        (call.name === "SELECT_TRAIN" || call.name === "SELECT_CLASS" || call.name === "UPDATE_PASSENGER")
+      ) {
+        const snap = store.get(conv.id);
+        yield {
+          type: "passenger_form",
+          selection: snap?.selection ?? null,
+          passengers: snap?.passengers ?? [],
+        };
+      }
 
       messages.push({
         role: "tool",

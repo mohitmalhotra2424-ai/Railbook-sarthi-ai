@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { conversationStore, type ConversationStore } from "@/assistant/context/store";
+import { validatePassengerField } from "@/assistant/passengers/validate";
 import { logger } from "@/lib/logger";
 import { isNotConfigured } from "@/providers/envelope";
 import { executeCapabilityFailover } from "@/providers/registry";
@@ -29,6 +31,8 @@ export interface ToolExecutionMeta {
   turnId: string;
   toolCallId: string;
   signal?: AbortSignal;
+  /** Prompt 25: application actions operate on the turn's store. */
+  store?: ConversationStore;
 }
 
 const TOOL_TIMEOUT_MS = 15_000;
@@ -150,6 +154,79 @@ export async function executeTool(
       ...baseResult(tool, meta, "ok"),
       note: "General-knowledge answer path. Answer the user's question from railway knowledge in their language; make clear it is general information, not live data.",
       data: { kind: "general_knowledge", question: (args as { question: string }).question },
+    };
+  }
+
+
+  // ---- Prompt 25: application actions — LLM proposes, backend validates ----
+  const p25store = meta.store ?? conversationStore;
+  if (tool === "SELECT_TRAIN") {
+    const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.SELECT_TRAIN>;
+    const conv = p25store.getOrCreate(meta.conversationId);
+    const searchRefs = conv.results.filter((r) => r.tool === "SEARCH_TRAINS" && !r.supersededBy && r.items?.length);
+    let hit: { item: { index: number; label: string; classes?: string[] }; ref: (typeof searchRefs)[number] } | null = null;
+    for (const ref of [...searchRefs].reverse()) {
+      const item = ref.items!.find((i) => i.label.startsWith(a.trainNumber));
+      if (item) {
+        hit = { item, ref };
+        break;
+      }
+    }
+    if (!hit) {
+      return {
+        ...baseResult(tool, meta, "error"),
+        note: `Train ${a.trainNumber} is NOT in the current valid search results — nothing was selected. Ask the user to choose from the listed trains, or re-run SEARCH_TRAINS.`,
+      };
+    }
+    const trainName = hit.item.label.split(" ").slice(1).join(" ").replace(/dep .*$/, "").trim() || undefined;
+    p25store.setSelection(conv.id, {
+      trainNumber: a.trainNumber,
+      trainName,
+      from: hit.ref.route?.from,
+      to: hit.ref.route?.to,
+      journeyDate: hit.ref.journeyDate,
+      classes: hit.item.classes,
+      selectedAt: new Date().toISOString(),
+    });
+    return {
+      ...baseResult(tool, meta, "ok"),
+      note: `Train ${a.trainNumber}${trainName ? ` (${trainName})` : ""} SELECTED and validated against the current search results; the UI was updated.${hit.item.classes?.length ? ` Supported classes: ${hit.item.classes.join(", ")}.` : " Class support could not be verified from provider data."} Confirm the selection to the user.`,
+      data: { trainNumber: a.trainNumber, classes: hit.item.classes ?? [] },
+    };
+  }
+  if (tool === "SELECT_CLASS") {
+    const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.SELECT_CLASS>;
+    const conv = p25store.getOrCreate(meta.conversationId);
+    if (!conv.selection) {
+      return { ...baseResult(tool, meta, "error"), note: "No train selected yet — select a train first (SELECT_TRAIN)." };
+    }
+    if (!conv.selection.classes?.length) {
+      return { ...baseResult(tool, meta, "error"), note: "Class support cannot be verified for this train (provider returned no class list). Explain honestly; nothing was changed." };
+    }
+    if (!conv.selection.classes.includes(a.classCode)) {
+      return { ...baseResult(tool, meta, "error"), note: `Class ${a.classCode} is NOT supported on train ${conv.selection.trainNumber} per provider data (supported: ${conv.selection.classes.join(", ")}). Nothing was changed — ask the user which supported class they want.` };
+    }
+    p25store.setSelectionClass(conv.id, a.classCode);
+    return {
+      ...baseResult(tool, meta, "ok"),
+      note: `Class ${a.classCode} selected for train ${conv.selection.trainNumber}. The passenger form is now open — guide the user through the missing passenger details one at a time, per FORM STATE.`,
+      data: { classCode: a.classCode },
+    };
+  }
+  if (tool === "UPDATE_PASSENGER") {
+    const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.UPDATE_PASSENGER>;
+    const v = validatePassengerField(a.field, a.value);
+    if (!v.ok) {
+      return { ...baseResult(tool, meta, "invalid_arguments"), note: `${v.error} Existing form values were NOT changed — ask again or clarify.` };
+    }
+    const res = p25store.updatePassenger(meta.conversationId, a.passenger ?? 1, v.patch);
+    if (!res.ok) {
+      return { ...baseResult(tool, meta, "error"), note: `${res.error} Existing values unchanged.` };
+    }
+    return {
+      ...baseResult(tool, meta, "ok"),
+      note: `Passenger ${a.passenger ?? 1} field "${a.field}" validated and saved; the form UI was updated.${a.field === "berth" ? " Berth is recorded as an unverified REQUEST only." : ""} Continue with the next missing required detail, if any.`,
+      data: { passengers: res.passengers },
     };
   }
 

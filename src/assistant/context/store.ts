@@ -31,7 +31,7 @@ export interface ResultRef {
   classCode?: string;
   trainNumber?: string;
   /** Compact rows so the LLM can resolve "doosri wali"-style references. */
-  items?: { index: number; label: string }[];
+  items?: { index: number; label: string; classes?: string[] }[];
   summary?: string;
   supersededBy?: string;
   supersededReason?: string;
@@ -46,6 +46,31 @@ export interface JourneyContext {
   classCode?: string;
 }
 
+/** Prompt 25 — explicit, backend-validated train/class selection state. */
+export interface SelectionState {
+  trainNumber: string;
+  trainName?: string;
+  from?: string;
+  to?: string;
+  journeyDate?: string;
+  /** Classes the provider actually returned for this train. */
+  classes?: string[];
+  classCode?: string;
+  selectedAt: string;
+}
+
+export interface PassengerDraft {
+  name?: string;
+  age?: number;
+  gender?: "male" | "female" | "other";
+  /** Berth preference is a REQUEST only — no authorised provider verifies options. */
+  berth?: string;
+}
+
+export const MAX_PASSENGERS = 6;
+/** Required passenger fields — derived from the form schema, not invented per-turn. */
+export const REQUIRED_PASSENGER_FIELDS = ["name", "age", "gender"] as const;
+
 export interface Conversation {
   id: string;
   createdAt: string;
@@ -54,6 +79,8 @@ export interface Conversation {
   messages: StoredMessage[];
   results: ResultRef[];
   journey: JourneyContext;
+  selection?: SelectionState;
+  passengers: PassengerDraft[];
   refCounter: number;
 }
 
@@ -81,6 +108,7 @@ export class ConversationStore {
       messages: [],
       results: [],
       journey: {},
+      passengers: [],
       refCounter: 0,
     };
     this.conversations.set(id, conv);
@@ -159,6 +187,11 @@ export class ConversationStore {
         if (dateChanged || routeChanged) {
           old.supersededBy = refId;
           old.supersededReason = dateChanged ? "journey date changed" : "route changed";
+          // Prompt 25 §7: a changed journey invalidates selection + form state.
+          if (conv.selection) {
+            conv.selection = undefined;
+            conv.passengers = [];
+          }
         }
       }
     }
@@ -218,13 +251,90 @@ export class ConversationStore {
       })
       .join("\n");
 
+    // Prompt 25: authoritative selection + passenger-form state (facts only).
+    const sel = conv.selection;
+    const selectionLine = sel
+      ? `train ${sel.trainNumber}${sel.trainName ? ` (${sel.trainName})` : ""}${sel.from ? ` ${sel.from}→${sel.to ?? "?"}` : ""}${sel.journeyDate ? ` date=${sel.journeyDate}` : ""}${sel.classCode ? ` class=${sel.classCode}` : " class NOT selected yet"}${sel.classes?.length ? ` supported classes: ${sel.classes.join(",")}` : ""}`
+      : "(no train selected)";
+    const pax = conv.passengers.length
+      ? conv.passengers
+          .map((p, i) => {
+            const missing = REQUIRED_PASSENGER_FIELDS.filter((f) => p[f] === undefined);
+            return `  P${i + 1}: ${p.name ? `name=${p.name} ` : ""}${p.age !== undefined ? `age=${p.age} ` : ""}${p.gender ? `gender=${p.gender} ` : ""}${p.berth ? `berth-request=${p.berth} ` : ""}${missing.length ? `MISSING: ${missing.join(",")}` : "complete"}`;
+          })
+          .join("\n")
+      : "  (none yet)";
+
     return [
       `TODAY: ${todayIso} (Asia/Kolkata) — resolve relative dates against this.`,
       `CONVERSATION: ${conv.id}  TURN: ${turnId}`,
       `JOURNEY CONTEXT: ${journey || "(nothing established yet)"}`,
+      `SELECTION & PASSENGER FORM: ${selectionLine}`,
+      `PASSENGERS:`,
+      pax,
       `RECENT TOOL RESULTS (newest last; do not use SUPERSEDED entries as current):`,
       results || "  (none yet)",
     ].join("\n");
+  }
+
+  /* ---- Prompt 25: selection + passenger-form state (validated writes only) ---- */
+
+  setSelection(id: string, sel: SelectionState): void {
+    const conv = this.getOrCreate(id);
+    conv.selection = sel;
+    conv.updatedAt = new Date().toISOString();
+  }
+
+  setSelectionClass(id: string, classCode: string): void {
+    const conv = this.get(id);
+    if (conv?.selection) {
+      conv.selection = { ...conv.selection, classCode };
+      conv.updatedAt = new Date().toISOString();
+    }
+  }
+
+  clearSelection(id: string): void {
+    const conv = this.get(id);
+    if (!conv) return;
+    conv.selection = undefined;
+    conv.passengers = [];
+    conv.updatedAt = new Date().toISOString();
+  }
+
+  updatePassenger(
+    id: string,
+    index: number,
+    patch: PassengerDraft,
+  ): { ok: true; passengers: PassengerDraft[] } | { ok: false; error: string } {
+    const conv = this.getOrCreate(id);
+    if (!conv.selection?.classCode) return { ok: false, error: "No valid train+class selected yet." };
+    if (!Number.isInteger(index) || index < 1 || index > MAX_PASSENGERS) {
+      return { ok: false, error: `Passenger index must be 1..${MAX_PASSENGERS}.` };
+    }
+    if (index > conv.passengers.length + 1) {
+      return { ok: false, error: "Complete the current passenger before adding another." };
+    }
+    const last = conv.passengers[conv.passengers.length - 1];
+    if (index === conv.passengers.length + 1 && last && !REQUIRED_PASSENGER_FIELDS.every((f) => last[f] !== undefined)) {
+      return { ok: false, error: "Complete the current passenger before adding another." };
+    }
+    while (conv.passengers.length < index) conv.passengers.push({});
+    conv.passengers[index - 1] = { ...conv.passengers[index - 1], ...patch };
+    conv.updatedAt = new Date().toISOString();
+    return { ok: true, passengers: conv.passengers };
+  }
+
+  addPassenger(id: string): { ok: true; passengers: PassengerDraft[] } | { ok: false; error: string } {
+    const conv = this.getOrCreate(id);
+    if (!conv.selection?.classCode) return { ok: false, error: "No valid train+class selected yet." };
+    if (conv.passengers.length >= MAX_PASSENGERS) return { ok: false, error: `Maximum ${MAX_PASSENGERS} passengers.` };
+    const last = conv.passengers[conv.passengers.length - 1];
+    if (last && !REQUIRED_PASSENGER_FIELDS.every((f) => last[f] !== undefined)) {
+      return { ok: false, error: "Complete the current passenger before adding another." };
+    }
+    conv.passengers.push({});
+    conv.updatedAt = new Date().toISOString();
+    return { ok: true, passengers: conv.passengers };
   }
 
   private prune(conv: Conversation): void {
@@ -254,7 +364,10 @@ function compactItems(data: unknown): { index: number; label: string }[] | undef
       [r.trainNumber, r.trainName, r.departure && `dep ${String(r.departure)}`, r.arrival && `arr ${String(r.arrival)}`]
         .filter(Boolean)
         .join(" ") || JSON.stringify(row).slice(0, 80);
-    return { index: i + 1, label };
+    const classes = Array.isArray(r.classes)
+      ? (r.classes as unknown[]).filter((c): c is string => typeof c === "string").slice(0, 8)
+      : undefined;
+    return { index: i + 1, label, ...(classes?.length ? { classes } : {}) };
   });
 }
 

@@ -10,6 +10,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { TrainResultCards, type TrainCard } from "./TrainResultCards";
+import { PassengerFormPanel, type PassengerFormState } from "./PassengerFormPanel";
 import { ResultBlocks } from "./ResultBlocks";
 import type { ResultBlock } from "@/assistant/orchestrator";
 import {
@@ -147,6 +148,7 @@ function ToolChipView({ chip }: { chip: ToolChip }) {
 export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [paxForm, setPaxForm] = useState<PassengerFormState | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   // Concurrency safety (Prompt 19): synchronous double-send guard, abortable
@@ -361,6 +363,13 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                   /* ignore */
                 }
                 break;
+              case "passenger_form":
+                // Prompt 25: authoritative selection + form state from the backend
+                setPaxForm({
+                  selection: (ev.selection as PassengerFormState["selection"]) ?? null,
+                  passengers: (ev.passengers as PassengerFormState["passengers"]) ?? [],
+                });
+                break;
               case "status":
                 if (ev.text === "using_fallback") {
                   patchMsg(assistantId, { viaFallback: true, model: ev.model ? String(ev.model) : undefined });
@@ -460,6 +469,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
       /* ignore */
     }
     setMessages([]);
+    setPaxForm(null);
     setConfirmReset(false);
     setShowJump(false);
     nearBottomRef.current = true;
@@ -605,7 +615,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                       <div className="rounded-2xl rounded-bl-md border border-cream-300 bg-white p-4">
                         <p className="text-[15px] leading-relaxed whitespace-pre-line text-navy-900">{m.text}</p>
                         {m.cards && m.cards.length > 0 && (
-                          <TrainResultCards cards={m.cards} onAsk={(q) => void send(q)} busy={busy} />
+                          <TrainResultCards cards={m.cards} onAsk={(q) => void send(q)} busy={busy} selectedTrainNumber={paxForm?.selection?.trainNumber ?? null} />
                         )}
                         {m.blocks && m.blocks.length > 0 && <ResultBlocks blocks={m.blocks} />}
                         <div className="mt-3 flex items-center justify-between gap-2 border-t border-cream-200 pt-2.5">
@@ -667,6 +677,14 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
               </div>
             </div>
           ))}
+
+          {paxForm && (
+            <PassengerFormPanel
+              state={paxForm}
+              conversationId={conversationIdRef.current}
+              onState={setPaxForm}
+            />
+          )}
         </div>
 
         {showJump && (

@@ -105,8 +105,8 @@ describe("orchestrator — the LLM decides, the orchestrator executes", () => {
     const message = events.find((e) => e.type === "message");
     expect(message?.type === "message" && message.text.length).toBeGreaterThan(0);
 
-    // The model was offered all 9 tools; routing came from the model, not keywords.
-    expect((requests[0]?.tools as unknown[]).length).toBe(9);
+    // The model was offered all 12 tools; routing came from the model, not keywords.
+    expect((requests[0]?.tools as unknown[]).length).toBe(12);
     // The tool message returned to the model carries correlation + honest status.
     const toolMsg = requests[1]?.messages.find((m) => m.role === "tool");
     expect(toolMsg?.tool_call_id).toBe("c1");

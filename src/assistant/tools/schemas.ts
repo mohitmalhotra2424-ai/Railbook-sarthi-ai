@@ -34,6 +34,9 @@ export const ToolNames = {
   CHECK_PNR: "CHECK_PNR",
   GET_CANCELLED_TRAINS: "GET_CANCELLED_TRAINS",
   GENERAL_RAILWAY_ANSWER: "GENERAL_RAILWAY_ANSWER",
+  SELECT_TRAIN: "SELECT_TRAIN",
+  SELECT_CLASS: "SELECT_CLASS",
+  UPDATE_PASSENGER: "UPDATE_PASSENGER",
 } as const;
 
 export type ToolName = (typeof ToolNames)[keyof typeof ToolNames];
@@ -98,6 +101,20 @@ export const GeneralRailwayAnswerArgs = z.object({
   language: z.enum(["hi", "hinglish", "en"]).optional().describe("Language of the user's question"),
 });
 
+export const SelectTrainArgs = z.object({
+  trainNumber: numericString(/^\d{4,6}$/, "4-6 digit train number").describe("The train number to select; must exist in the current non-superseded SEARCH_TRAINS results."),
+});
+
+export const SelectClassArgs = z.object({
+  classCode: z.string().min(1).max(4).describe("Travel class code as returned by the provider for the selected train, e.g. 'SL', '3A', '2A', '1A', 'CC'."),
+});
+
+export const UpdatePassengerArgs = z.object({
+  passenger: z.number().int().min(1).max(6).optional().describe("1-based passenger index (default 1)."),
+  field: z.enum(["name", "age", "gender", "berth"]).describe("The passenger field to validate and record."),
+  value: z.string().min(1).describe("The user's answer for that field, verbatim."),
+});
+
 export const TOOL_ARG_SCHEMAS = {
   SEARCH_TRAINS: SearchTrainsArgs,
   GET_TRAIN_INFO: GetTrainInfoArgs,
@@ -108,6 +125,9 @@ export const TOOL_ARG_SCHEMAS = {
   CHECK_PNR: CheckPnrArgs,
   GET_CANCELLED_TRAINS: GetCancelledTrainsArgs,
   GENERAL_RAILWAY_ANSWER: GeneralRailwayAnswerArgs,
+  SELECT_TRAIN: SelectTrainArgs,
+  SELECT_CLASS: SelectClassArgs,
+  UPDATE_PASSENGER: UpdatePassengerArgs,
 } as const satisfies Record<ToolName, z.ZodType>;
 
 /* ---------------- JSON Schemas shown to the model ---------------- */
@@ -258,6 +278,49 @@ export const TOOL_DEFINITIONS: ChatToolDef[] = [
           language: { type: "string", enum: ["hi", "hinglish", "en"], description: "User's language" },
         },
         required: ["question"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "SELECT_TRAIN",
+      description:
+        "Select a train FROM THE CURRENT NON-SUPERSEDED SEARCH_TRAINS RESULTS in CONTEXT (resolve 'pehli wali', 'doosri', names or numbers against those item indexes). The backend re-validates the number against those results; a train absent from them is rejected. Call this when the user chooses a train; confirm only after the tool returns ok.",
+      parameters: {
+        type: "object",
+        properties: { trainNumber: str("4-6 digit train number present in the current valid search results") },
+        required: ["trainNumber"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "SELECT_CLASS",
+      description:
+        "Select the travel class for the already-selected train. The backend validates the class against the classes the provider returned for that train. If the class is unsupported, explain the verified result and ask what the user wants.",
+      parameters: {
+        type: "object",
+        properties: { classCode: str("Class code supported on the selected train, e.g. 'SL', '3A', '2A', '1A', 'CC'") },
+        required: ["classCode"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "UPDATE_PASSENGER",
+      description:
+        "Validate and record ONE passenger detail (name/age/gender, or berth as an unverified request) into the passenger form, after train+class are selected. Ask for one missing required detail at a time; never re-ask a field already present in the FORM STATE; corrections overwrite the same field. The backend validates every value before it becomes authoritative.",
+      parameters: {
+        type: "object",
+        properties: {
+          passenger: { type: "number", description: "1-based passenger index (default 1)" },
+          field: { type: "string", enum: ["name", "age", "gender", "berth"], description: "Which field this answer belongs to" },
+          value: { type: "string", description: "The user's answer, verbatim" },
+        },
+        required: ["field", "value"],
       },
     },
   },

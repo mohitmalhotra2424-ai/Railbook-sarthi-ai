@@ -2,6 +2,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { BrandMark } from "./icons";
 import { availabilityKind, KIND_LABEL, KIND_PILL, stationCode } from "./results/status";
+import { CheckIcon } from "./icons";
 
 export interface TrainCard {
   trainNumber: string;
@@ -53,18 +54,27 @@ export function TrainResultCards({
   cards,
   onAsk,
   busy = false,
+  selectedTrainNumber = null,
 }: {
   cards: TrainCard[];
   /** Sends a natural-language follow-up through the existing chat turn. */
   onAsk?: (question: string) => void;
   /** True while a chat turn is in flight — drives chip/button loading states. */
   busy?: boolean;
+  /** Prompt 25: backend-validated selection, mirrored in the UI. */
+  selectedTrainNumber?: string | null;
 }) {
   if (cards.length === 0) return null;
   return (
     <ul className="mt-3 space-y-2.5" data-testid="train-cards">
       {cards.map((c) => (
-        <TrainCardView key={`${c.trainNumber}-${c.departure}`} c={c} onAsk={onAsk} busy={busy} />
+        <TrainCardView
+          key={`${c.trainNumber}-${c.departure}`}
+          c={c}
+          onAsk={onAsk}
+          busy={busy}
+          selected={selectedTrainNumber === c.trainNumber}
+        />
       ))}
     </ul>
   );
@@ -74,10 +84,12 @@ function TrainCardView({
   c,
   onAsk,
   busy,
+  selected,
 }: {
   c: TrainCard;
   onAsk?: (q: string) => void;
   busy: boolean;
+  selected: boolean;
 }) {
   const [pendingActionRaw, setPendingAction] = useState<null | "availability" | "fare">(null);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
@@ -131,6 +143,14 @@ function TrainCardView({
         <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-navy-900">
           {c.trainNumber} · {c.trainName}
         </p>
+        {selected && (
+          <span
+            data-testid="card-selected"
+            className="flex shrink-0 items-center gap-1 rounded-full bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold text-signal-700"
+          >
+            <CheckIcon className="h-2.5 w-2.5" /> Selected
+          </span>
+        )}
         {c.journeyDate && (
           <p className="shrink-0 text-[10px] font-semibold text-navy-500" data-testid="card-journey-date">
             {c.journeyDate}
