@@ -8,6 +8,7 @@ import {
   type ChatResponse,
 } from "./llm/client";
 import { conversationStore, ConversationStore, REQUIRED_PASSENGER_FIELDS } from "./context/store";
+import { evaluateReadiness } from "./booking/preparation";
 import { guardSaveClaims } from "./passengers/save-claim-guard";
 import { SYSTEM_PROMPT } from "./prompts";
 import { executeTool } from "./tools/executor";
@@ -70,6 +71,9 @@ export type TurnEvent =
       type: "passenger_form";
       selection: import("./context/store").SelectionState | null;
       passengers: import("./context/store").PassengerDraft[];
+      /** Prompt 31: deterministic readiness + review state (backend-authoritative). */
+      readiness: import("./booking/preparation").ReadinessResult;
+      review: import("./context/store").ReviewState | null;
     }
   | { type: "error"; code: string; message: string; retryable: boolean };
 
@@ -445,6 +449,8 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
           type: "passenger_form",
           selection: snap?.selection ?? null,
           passengers: snap?.passengers ?? [],
+          readiness: evaluateReadiness(snap!),
+          review: snap?.review ?? null,
         };
       }
 

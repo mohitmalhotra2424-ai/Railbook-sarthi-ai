@@ -5,13 +5,18 @@ import {
   MAX_PASSENGERS,
   REQUIRED_PASSENGER_FIELDS,
   type PassengerDraft,
+  type ReviewState,
   type SelectionState,
 } from "@/assistant/context/store";
+import type { ReadinessResult } from "@/assistant/booking/preparation";
 import { CheckIcon, WarnIcon } from "./icons";
 
 export interface PassengerFormState {
   selection: SelectionState | null;
   passengers: PassengerDraft[];
+  /** Prompt 31 — backend-authoritative readiness + review state. */
+  readiness?: ReadinessResult | null;
+  review?: ReviewState | null;
 }
 
 /**
@@ -34,6 +39,29 @@ export function PassengerFormPanel({
   const sel = state.selection;
   if (!sel?.classCode) return null; // form appears only after train + class are selected (tap, voice or chat)
 
+  const act = async (action: "review" | "confirm") => {
+    if (!conversationId) return;
+    const res = await fetch("/api/passenger", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ conversationId, action }),
+    });
+    const data = (await res.json()) as {
+      ok: boolean;
+      error?: string;
+      selection?: SelectionState | null;
+      passengers?: PassengerDraft[];
+      readiness?: ReadinessResult | null;
+      review?: ReviewState | null;
+    };
+    onState({
+      selection: data.selection ?? sel,
+      passengers: data.passengers ?? state.passengers,
+      readiness: data.readiness ?? null,
+      review: data.review ?? null,
+    });
+  };
+
   const passengers = state.passengers.length ? state.passengers : [{}];
   const currentComplete = (p: PassengerDraft) =>
     REQUIRED_PASSENGER_FIELDS.every((f) => p[f] !== undefined);
@@ -50,6 +78,8 @@ export function PassengerFormPanel({
       error?: string;
       selection?: SelectionState | null;
       passengers?: PassengerDraft[];
+      readiness?: ReadinessResult | null;
+      review?: ReviewState | null;
     };
     setErrors((e) => {
       const next = { ...e };
@@ -58,7 +88,7 @@ export function PassengerFormPanel({
       else next[key] = data.error ?? "Could not save.";
       return next;
     });
-    if (data.ok && data.passengers) onState({ selection: data.selection ?? sel, passengers: data.passengers });
+    if (data.ok && data.passengers) onState({ selection: data.selection ?? sel, passengers: data.passengers, readiness: data.readiness ?? null, review: data.review ?? null });
   };
 
   return (
@@ -118,9 +148,46 @@ export function PassengerFormPanel({
             );
           })}
         </ul>
-        {passengers.every(currentComplete) && (
+        {state.readiness && !state.readiness.ready && (
+          <p className="mt-1.5 text-[9px] font-semibold text-saffron-600" data-testid="review-blocked">
+            Review blocked — {state.readiness.missingFields.length
+              ? `missing: ${state.readiness.missingFields.join(", ")}`
+              : state.readiness.blockers.map((b) => b.code).join(", ")}
+          </p>
+        )}
+        {state.readiness?.ready && (
           <p className="mt-1.5 text-[9px] font-semibold text-navy-600" data-testid="review-ready">
             All required details saved. Review only — booking execution is disabled.
+          </p>
+        )}
+        {state.readiness?.ready && !state.review && (
+          <button
+            type="button"
+            data-testid="build-review"
+            onClick={() => void act("review")}
+            className="mt-1.5 rounded-full bg-navy-900 px-3 py-1.5 text-[10px] font-bold text-white transition hover:bg-navy-800"
+          >
+            Review details
+          </button>
+        )}
+        {state.review?.status === "awaiting_confirmation" && (
+          <div className="mt-1.5 flex items-center gap-2" data-testid="review-awaiting">
+            <p className="text-[9px] font-semibold text-navy-700">
+              Review v{state.review.version} built — confirm the details above to mark handoff-ready.
+            </p>
+            <button
+              type="button"
+              data-testid="confirm-review"
+              onClick={() => void act("confirm")}
+              className="rounded-full bg-signal-600 px-3 py-1.5 text-[10px] font-bold text-white transition hover:bg-signal-700"
+            >
+              Confirm details
+            </button>
+          </div>
+        )}
+        {state.review?.status === "confirmed" && (
+          <p className="mt-1.5 text-[9px] font-bold text-signal-700" data-testid="handoff-ready">
+            IRCTC_HANDOFF_READY — booking details ready for handoff. Actual booking execution is not enabled.
           </p>
         )}
       </div>
@@ -182,19 +249,35 @@ export function PassengerFormPanel({
                 );
               })}
               <label className="block">
-                <span className="text-[10px] font-semibold text-navy-700">Berth preference (optional)</span>
+                <span className="flex items-center gap-1.5 text-[10px] font-semibold text-navy-700">
+                  Berth preference
+                  {p.berth ? (
+                    <CheckIcon className="h-3 w-3 text-signal-500" />
+                  ) : nextMissing === "berth" ? (
+                    <span className="rounded-full bg-saffron-500/10 px-1.5 py-0.5 text-[9px] font-bold text-saffron-600" data-testid="form-next-field">
+                      assistant is asking this now
+                    </span>
+                  ) : null}
+                </span>
                 <input
                   aria-label={`Passenger ${i + 1} berth preference`}
                   defaultValue={p.berth ?? ""}
-                  placeholder="e.g. lower berth — request only"
+                  placeholder="e.g. lower berth — required, request only"
                   onBlur={(e) => {
                     const v = e.target.value.trim();
                     if (v && v !== (p.berth ?? "")) void edit(i + 1, "berth", v);
                   }}
-                  className="mt-1 w-full rounded-lg border border-cream-300 px-2.5 py-1.5 text-[12px] text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-300"
+                  className={`mt-1 w-full rounded-lg border px-2.5 py-1.5 text-[12px] text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-300 ${
+                    errors[`${i + 1}:berth`] ? "border-alert-500" : "border-cream-300"
+                  }`}
                 />
+                {errors[`${i + 1}:berth`] && (
+                  <span className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-alert-500" data-testid="form-field-error">
+                    <WarnIcon className="h-2.5 w-2.5" /> {errors[`${i + 1}:berth`]}
+                  </span>
+                )}
                 <span className="mt-0.5 block text-[9px] text-navy-500">
-                  A request only — no authorised provider verifies berth options; not a guarantee.
+                  Mandatory for review. A request only — no authorised provider verifies berth options; not a guarantee.
                 </span>
               </label>
             </div>

@@ -360,6 +360,8 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                 const nextForm: PassengerFormState = {
                   selection: (ev.selection as PassengerFormState["selection"]) ?? null,
                   passengers: (ev.passengers as PassengerFormState["passengers"]) ?? [],
+                  readiness: (ev.readiness as PassengerFormState["readiness"]) ?? null,
+                  review: (ev.review as PassengerFormState["review"]) ?? null,
                 };
                 const wasOpen = paxOpenRef.current;
                 const nowOpen = Boolean(nextForm.selection?.classCode);

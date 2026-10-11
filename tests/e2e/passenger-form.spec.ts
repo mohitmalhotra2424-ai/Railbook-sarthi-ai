@@ -18,10 +18,10 @@ const SELECTION = {
   selectedAt: "2026-10-11T00:00:00.000Z",
 };
 
-function sseWithForm(passengers: unknown[]) {
+function sseWithForm(passengers: unknown[], readiness?: unknown) {
   return [
     { type: "conversation", conversationId: "p25-fixture-conv-1" },
-    { type: "passenger_form", selection: SELECTION, passengers },
+    { type: "passenger_form", selection: SELECTION, passengers, ...(readiness ? { readiness, review: null } : {}) },
     { type: "message", text: "Form khul gaya — age bataiye.", model: "fixture", viaFallback: false, cards: [] },
     { type: "done" },
   ]
@@ -114,16 +114,91 @@ test("Prompt 30: journey review shows authoritative selection + per-passenger co
   await expect(review).toContainText("2026-10-12");
   await expect(review).toContainText("LDH → NDLS");
   await expect(review).toContainText("3A");
-  await expect(page.getByTestId("review-pax-1")).toContainText("missing: age, gender");
+  await expect(page.getByTestId("review-pax-1")).toContainText("missing: age, gender, berth");
   await expect(page.getByTestId("review-ready")).toHaveCount(0); // not complete, no false readiness
 
-  // Complete passenger (fresh load): readiness shown honestly, booking still disabled.
+  // Prompt 31 (owner rule): name+age+gender saved but berth MISSING → still NOT
+  // complete, review stays blocked on the missing field.
+  const READY_FALSE_BERTH = {
+    ready: false,
+    missingFields: ["passenger 1: berth"],
+    blockers: [{ code: "PASSENGER_INCOMPLETE", detail: "Passenger 1 is missing: berth." }],
+    warnings: [],
+  };
   await page.route("**/api/assistant", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm([{ name: "Rahul Sharma", age: 28, gender: "male" }]) }),
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: sseWithForm([{ name: "Rahul Sharma", age: 28, gender: "male" }], READY_FALSE_BERTH),
+    }),
+  );
+  await page.goto("/chat");
+  await page.getByLabel("Message").fill("select karo");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByTestId("review-pax-1")).toContainText("missing: berth");
+  await expect(page.getByTestId("review-blocked")).toContainText("missing: passenger 1: berth");
+  await expect(page.getByTestId("review-ready")).toHaveCount(0);
+  await expect(page.getByTestId("build-review")).toHaveCount(0);
+
+  // Complete passenger INCLUDING berth (fresh load): readiness shown honestly,
+  // booking still disabled, review can be built.
+  const READY_TRUE = { ready: true, missingFields: [], blockers: [], warnings: [] };
+  await page.route("**/api/assistant", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: sseWithForm([{ name: "Rahul Sharma", age: 28, gender: "male", berth: "lower" }], READY_TRUE),
+    }),
   );
   await page.goto("/chat");
   await page.getByLabel("Message").fill("select karo");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByTestId("review-pax-1")).toContainText("Passenger 1 complete");
   await expect(page.getByTestId("review-ready")).toContainText("booking execution is disabled");
+  await expect(page.getByTestId("build-review")).toBeVisible();
+});
+
+test("Prompt 31: review → confirm → IRCTC_HANDOFF_READY via the validated backend path", async ({ page }) => {
+  const COMPLETE = [{ name: "Rahul Sharma", age: 28, gender: "male", berth: "lower" }];
+  const READY_TRUE = { ready: true, missingFields: [], blockers: [], warnings: [] };
+  await page.route("**/api/assistant", (route) =>
+    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm(COMPLETE, READY_TRUE) }),
+  );
+  await page.route("**/api/passenger", async (route) => {
+    const body = JSON.parse(route.request().postData() ?? "{}") as { action?: string };
+    if (body.action === "review") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true, selection: SELECTION, passengers: COMPLETE, readiness: READY_TRUE,
+          review: { version: 1, builtAt: "2026-10-11T00:00:00.000Z", status: "awaiting_confirmation", snapshot: "fx" },
+        }),
+      });
+      return;
+    }
+    if (body.action === "confirm") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true, selection: SELECTION, passengers: COMPLETE, readiness: READY_TRUE,
+          review: { version: 1, builtAt: "2026-10-11T00:00:00.000Z", status: "confirmed", snapshot: "fx" },
+          handoff: "IRCTC_HANDOFF_READY",
+        }),
+      });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, selection: SELECTION, passengers: COMPLETE, readiness: READY_TRUE, review: null }) });
+  });
+
+  await page.goto("/chat");
+  await page.getByLabel("Message").fill("select karo");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByTestId("build-review")).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId("build-review").click();
+  await expect(page.getByTestId("review-awaiting")).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId("confirm-review").click();
+  await expect(page.getByTestId("handoff-ready")).toContainText("IRCTC_HANDOFF_READY");
+  await expect(page.getByTestId("handoff-ready")).toContainText("not enabled");
 });

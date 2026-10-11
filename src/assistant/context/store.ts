@@ -12,6 +12,7 @@
  */
 
 import type { ToolResult } from "@/assistant/tools/results";
+import { evaluateReadiness } from "@/assistant/booking/preparation";
 
 export interface StoredMessage {
   role: "user" | "assistant";
@@ -68,8 +69,20 @@ export interface PassengerDraft {
 }
 
 export const MAX_PASSENGERS = 6;
-/** Required passenger fields — derived from the form schema, not invented per-turn. */
-export const REQUIRED_PASSENGER_FIELDS = ["name", "age", "gender"] as const;
+/** Required passenger fields — derived from the form schema, not invented per-turn.
+ *  Prompt 31 (owner rule): EVERY form field is mandatory before review, so the
+ *  berth preference (still a request-only, unverified value) is required too. */
+export const REQUIRED_PASSENGER_FIELDS = ["name", "age", "gender", "berth"] as const;
+
+/** Prompt 31 — review/confirmation boundary (deterministic, backend-authoritative). */
+export type ReviewStatus = "awaiting_confirmation" | "confirmed";
+export interface ReviewState {
+  version: number;
+  builtAt: string;
+  status: ReviewStatus;
+  /** Deterministic snapshot of booking-critical fields at build time. */
+  snapshot: string;
+}
 
 export interface Conversation {
   id: string;
@@ -82,6 +95,8 @@ export interface Conversation {
   selection?: SelectionState;
   passengers: PassengerDraft[];
   refCounter: number;
+  /** Prompt 31 — current review, if any; invalidated on any critical change. */
+  review?: ReviewState;
 }
 
 const MAX_CONVERSATIONS = 200;
@@ -210,6 +225,12 @@ export class ConversationStore {
       if (a.date) conv.journey.date = a.date;
     }
 
+    // Prompt 31: new search/availability/fare data can change booking-critical
+    // facts — any existing review is invalidated (confirmation must not carry over).
+    if (tool === "SEARCH_TRAINS" || tool === "CHECK_AVAILABILITY" || tool === "GET_FARE") {
+      conv.review = undefined;
+    }
+
     conv.results.push(ref);
     if (conv.results.length > MAX_RESULT_REFS) {
       conv.results.splice(0, conv.results.length - MAX_RESULT_REFS);
@@ -282,6 +303,7 @@ export class ConversationStore {
   setSelection(id: string, sel: SelectionState): void {
     const conv = this.getOrCreate(id);
     conv.selection = sel;
+    conv.review = undefined; // Prompt 31: booking-critical change invalidates review
     conv.updatedAt = new Date().toISOString();
   }
 
@@ -289,6 +311,7 @@ export class ConversationStore {
     const conv = this.get(id);
     if (conv?.selection) {
       conv.selection = { ...conv.selection, classCode };
+      conv.review = undefined; // Prompt 31: booking-critical change invalidates review
       conv.updatedAt = new Date().toISOString();
     }
   }
@@ -298,6 +321,7 @@ export class ConversationStore {
     if (!conv) return;
     conv.selection = undefined;
     conv.passengers = [];
+    conv.review = undefined;
     conv.updatedAt = new Date().toISOString();
   }
 
@@ -320,6 +344,7 @@ export class ConversationStore {
     }
     while (conv.passengers.length < index) conv.passengers.push({});
     conv.passengers[index - 1] = { ...conv.passengers[index - 1], ...patch };
+    conv.review = undefined; // Prompt 31: passenger detail change invalidates review
     conv.updatedAt = new Date().toISOString();
     return { ok: true, passengers: conv.passengers };
   }
@@ -333,8 +358,67 @@ export class ConversationStore {
       return { ok: false, error: "Complete the current passenger before adding another." };
     }
     conv.passengers.push({});
+    conv.review = undefined; // Prompt 31: passenger count change invalidates review
     conv.updatedAt = new Date().toISOString();
     return { ok: true, passengers: conv.passengers };
+  }
+
+  /* ---- Prompt 31: deterministic review build + confirmation boundary ---- */
+
+  /** Deterministic snapshot of everything booking-critical. */
+  reviewSnapshot(conv: Conversation): string {
+    const latest = (tool: string) => {
+      const refs = conv.results.filter((r) => r.tool === tool && !r.supersededBy);
+      const r = refs[refs.length - 1];
+      return r ? `${r.refId}@${r.retrievedAt ?? ""}` : null;
+    };
+    return JSON.stringify({
+      journey: conv.journey,
+      selection: conv.selection ?? null,
+      passengers: conv.passengers,
+      availability: latest("CHECK_AVAILABILITY"),
+      fare: latest("GET_FARE"),
+    });
+  }
+
+  /** Builds a review ONLY when the preparation service says ready. */
+  buildReview(id: string): { ok: true; review: ReviewState } | { ok: false; error: string } {
+    const conv = this.get(id);
+    if (!conv) return { ok: false, error: "Unknown conversation." };
+    const readiness = evaluateReadiness(conv);
+    if (!readiness.ready) {
+      return {
+        ok: false,
+        error: `Not ready for review: ${readiness.missingFields.length ? `missing ${readiness.missingFields.join(", ")}` : readiness.blockers.map((b) => b.code).join(", ")}`,
+      };
+    }
+    const review: ReviewState = {
+      version: (conv.review?.version ?? 0) + 1,
+      builtAt: new Date().toISOString(),
+      status: "awaiting_confirmation",
+      snapshot: this.reviewSnapshot(conv),
+    };
+    conv.review = review;
+    conv.updatedAt = new Date().toISOString();
+    return { ok: true, review };
+  }
+
+  /** Confirmation is valid only for the current, awaiting, un-staled review. */
+  confirmReview(id: string): { ok: true; review: ReviewState } | { ok: false; error: string } {
+    const conv = this.get(id);
+    const review = conv?.review;
+    if (!conv || !review) return { ok: false, error: "No review is pending — build the review first." };
+    if (review.status !== "awaiting_confirmation") {
+      return { ok: false, error: "This review was already confirmed; rebuild it to confirm again." };
+    }
+    if (this.reviewSnapshot(conv) !== review.snapshot) {
+      conv.review = undefined; // details changed under the review — invalidate
+      conv.updatedAt = new Date().toISOString();
+      return { ok: false, error: "Details changed after the review was built — review invalidated. Rebuild and review the updated details." };
+    }
+    review.status = "confirmed";
+    conv.updatedAt = new Date().toISOString();
+    return { ok: true, review };
   }
 
   private prune(conv: Conversation): void {

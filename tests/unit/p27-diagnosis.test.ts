@@ -158,7 +158,7 @@ it("A: on the 'Age 28' turn the model DOES receive the tool + full passenger con
   // the exact missing fields — nothing stale, nothing absent.
   const ctx = req?.messages[1]?.content ?? "";
   expect(ctx).toContain("name=Rahul Sharma");
-  expect(ctx).toContain("MISSING: age,gender");
+  expect(ctx).toContain("MISSING: age,gender,berth");
   expect(ctx).toContain("class=3A");
   // The user's answer is the final message (ordering intact).
   expect(req?.messages.at(-1)?.content).toBe("Age 28.");
@@ -205,7 +205,7 @@ it("C: with name already stored, the context marks it present — no re-ask need
   // Name is present (never listed as missing) → the model is never asked for it again.
   expect(ctx).toContain("name=Rahul Sharma");
   expect(ctx).not.toContain("MISSING: name");
-  expect(ctx).toContain("MISSING: age,gender");
+  expect(ctx).toContain("MISSING: age,gender,berth");
   // Bare "28" was recorded as age; name retained (no duplication/re-ask).
   expect(store.get("d27-c")?.passengers[0]).toMatchObject({ name: "Rahul Sharma", age: 28 });
 });
