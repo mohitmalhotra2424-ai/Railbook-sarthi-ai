@@ -48,13 +48,38 @@ export async function POST(request: Request): Promise<Response> {
         encoder.encode(`data: ${JSON.stringify({ type: "conversation", conversationId })}\n\n`),
       );
       try {
+        // Prompt 20 §1/§7: per-turn resilience metrics — counters only,
+        // never message content, passenger data or credentials.
+        const startedAt = Date.now();
+        let toolResults = 0;
+        let toolErrors = 0;
+        let llmErrors = 0;
+        let usedFallback = false;
+        let outcome = "ok";
         for await (const event of runTurn({
           conversationId,
           message: message.slice(0, 4000),
           signal: request.signal,
         })) {
+          if (event.type === "tool_result") toolResults += 1;
+          if (event.type === "error") {
+            outcome = "error";
+            if (String(event.code).startsWith("LLM_")) llmErrors += 1;
+            else toolErrors += 1;
+          }
+          if (event.type === "message" && event.viaFallback) usedFallback = true;
           send(event);
         }
+        logger.info("assistant turn completed", {
+          conversationId,
+          durationMs: Date.now() - startedAt,
+          toolResults,
+          toolErrors,
+          llmErrors,
+          usedFallback,
+          outcome,
+          aborted: request.signal.aborted,
+        });
       } catch (error) {
         if (!request.signal.aborted) {
           logger.error("assistant turn crashed", {

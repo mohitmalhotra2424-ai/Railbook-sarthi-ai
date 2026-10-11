@@ -67,3 +67,40 @@ test("New Chat during an in-flight turn drops the delayed response entirely", as
   const cid = await page.evaluate(() => localStorage.getItem("railsaarthi.cid"));
   expect(cid === null || cid === "").toBe(true);
 });
+
+test("network interruption shows an honest retryable error; Retry recovers the turn", async ({ page }) => {
+  let calls = 0;
+  await page.route("**/api/assistant", async (route) => {
+    calls += 1;
+    if (calls === 1) {
+      await route.abort(); // simulate dropped network mid-turn
+      return;
+    }
+    // "Network is back" — server responds honestly (e2e runs without LLM creds)
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body:
+        'data: {"type":"conversation","conversationId":"resil-conv-1"}\n\n' +
+        'data: {"type":"error","code":"LLM_NOT_CONFIGURED","message":"LLM is not configured.","retryable":true}\n\n' +
+        'data: {"type":"done"}\n\n',
+    });
+  });
+
+  await page.goto("/chat");
+  await page.getByLabel("Message").fill("Ludhiana se Delhi");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const error = page.getByTestId("chat-error");
+  await expect(error).toBeVisible({ timeout: 10_000 });
+  await expect(error).toContainText("NETWORK_ERROR");
+
+  const retry = page.getByTestId("retry-button");
+  await expect(retry).toBeEnabled();
+  await retry.click();
+
+  await expect(page.getByTestId("chat-error").last()).toContainText("LLM_NOT_CONFIGURED", { timeout: 10_000 });
+  expect(calls).toBe(2); // retried exactly once
+  // Still no fabricated railway data anywhere
+  await expect(page.getByTestId("train-cards")).toHaveCount(0);
+});

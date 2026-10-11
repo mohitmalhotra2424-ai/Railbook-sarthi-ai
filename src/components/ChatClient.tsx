@@ -212,6 +212,13 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
     } catch {
       /* private mode — ephemeral conversation */
     }
+    // Lifecycle safety (Prompt 20 §6): leaving the page must cancel any
+    // in-flight stream and clear pending timers — no work outlives the UI.
+    return () => {
+      genRef.current += 1;
+      abortRef.current?.abort();
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
