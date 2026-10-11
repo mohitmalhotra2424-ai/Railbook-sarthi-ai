@@ -103,16 +103,14 @@ function TrainCardView({
       c.journeyDate ? ` (${c.journeyDate})` : ""
     }?`;
 
-  /** Class chip tap: select for follow-ups; if this class has no returned
-   *  availability yet, run a real enquiry through the existing turn. */
+  /** Class chip tap: ask the assistant to select this train + class. The
+   *  backend (LLM-driven SELECT_TRAIN/SELECT_CLASS) records it authoritatively
+   *  and only then does the passenger form appear. */
   const onClassTap = (cls: string) => {
-    if (busy) return;
+    if (busy || !onAsk) return;
     setSelectedClass(cls);
-    const has = c.availability?.some((a) => a.classCode === cls);
-    if (!has && onAsk) {
-      setPendingClass(cls);
-      onAsk(availabilityQuestion(cls));
-    }
+    setPendingClass(cls);
+    onAsk(`${c.trainNumber} ${cls} select karo`);
   };
 
   // Chips come only from the authoritative result (classes ∪ returned availability).

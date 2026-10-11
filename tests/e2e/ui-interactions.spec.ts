@@ -95,7 +95,7 @@ test("train details exposes accessible tabs with panel wiring", async ({ page })
   await expect(page.getByRole("tab", { name: "Route" })).toHaveAttribute("aria-selected", "true");
 });
 
-test("class chips: tap selects, fires real availability enquiry for that class, keeps association", async ({
+test("class chips: tap asks the assistant to select train + that class, keeps association", async ({
   page,
 }) => {
   await page.route("**/api/assistant", (r) =>
@@ -111,10 +111,10 @@ test("class chips: tap selects, fires real availability enquiry for that class, 
   await expect(cc).toHaveAttribute("aria-pressed", "false");
   await cc.click();
 
-  // selected state + a real follow-up turn for THIS class
+  // selected state + the follow-up turn selects THIS train + class
   await expect(cc).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("chat-message-user")).toHaveCount(2, { timeout: 10_000 });
-  await expect(page.getByTestId("chat-message-user").nth(1)).toContainText("CC seat availability");
+  await expect(page.getByTestId("chat-message-user").nth(1)).toContainText("CC select karo");
 
   // chips with provider availability show dot+label text (fixture 1st card has none,
   // but availability chips appear in the result block tables — verify card raw line absent)

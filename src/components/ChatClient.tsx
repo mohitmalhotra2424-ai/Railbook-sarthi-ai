@@ -362,7 +362,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                   passengers: (ev.passengers as PassengerFormState["passengers"]) ?? [],
                 };
                 const wasOpen = paxOpenRef.current;
-                const nowOpen = Boolean(nextForm.selection?.trainNumber);
+                const nowOpen = Boolean(nextForm.selection?.classCode);
                 paxOpenRef.current = nowOpen;
                 setPaxForm(nextForm);
                 // The form appears the moment a train is selected (tap, text or
