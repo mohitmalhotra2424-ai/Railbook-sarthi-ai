@@ -23,6 +23,7 @@ import {
   StopIcon,
   WarnIcon,
 } from "./icons";
+import { availabilityKind, KIND_LABEL } from "./results/status";
 import Link from "next/link";
 import { useVoiceInput } from "./voice/useVoiceInput";
 import { useSpeak } from "./voice/useSpeak";
@@ -83,6 +84,39 @@ function chipStyle(chip: ToolChip): string {
     default:
       return "border-alert-500/30 bg-alert-500/10 text-alert-500";
   }
+}
+
+/** Concise spoken summary built ONLY from verified structured data in the
+ *  message (cards/blocks). Never invents availability, fare or status. */
+function speechSummary(m: ChatMsg): string {
+  const bits: string[] = [];
+  if (m.text) bits.push(m.text);
+  for (const c of m.cards ?? []) {
+    const av = (c.availability ?? [])
+      .map((a) => `${a.classCode} ${KIND_LABEL[availabilityKind(a.status)]}`)
+      .join(", ");
+    bits.push(`${c.trainNumber} mein ${av || "abhi availability verify nahi hui"}.`);
+  }
+  for (const b of m.blocks ?? []) {
+    if (b.kind === "availability") {
+      bits.push(
+        `${b.data.trainNumber}: ` +
+          b.data.classes.map((x) => `${x.classCode} ${KIND_LABEL[availabilityKind(x.status)]}`).join(", ") +
+          ".",
+      );
+    } else if (b.kind === "fare") {
+      bits.push(`${b.data.trainNumber} ${b.data.classCode} fare ${b.data.totalFare} rupees hai.`);
+    } else if (b.kind === "live") {
+      bits.push(
+        b.data.running === null
+          ? `${b.data.trainNumber} ki live position verify nahi hui.`
+          : `${b.data.trainNumber} ${
+              b.data.running ? "running hai" : "running nahi hai"
+            }, last report ${b.data.lastStation?.name ?? "unknown"}.`,
+      );
+    }
+  }
+  return bits.join(" ").slice(0, 1200);
 }
 
 function ToolChipView({ chip }: { chip: ToolChip }) {
@@ -186,7 +220,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
     const last = [...messages].reverse().find((m) => m.role === "assistant" && m.text);
     if (last && last.id !== lastAutoSpokenRef.current) {
       lastAutoSpokenRef.current = last.id;
-      speak.speak(last.id, last.text!);
+      speak.speak(last.id, speechSummary(last));
     }
   }, [conversationMode, busy, messages, speak]);
 
@@ -545,7 +579,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                       <div className="rounded-2xl rounded-bl-md border border-cream-300 bg-white p-4">
                         <p className="text-[15px] leading-relaxed whitespace-pre-line text-navy-900">{m.text}</p>
                         {m.cards && m.cards.length > 0 && (
-                          <TrainResultCards cards={m.cards} onAsk={(q) => void send(q)} />
+                          <TrainResultCards cards={m.cards} onAsk={(q) => void send(q)} busy={busy} />
                         )}
                         {m.blocks && m.blocks.length > 0 && <ResultBlocks blocks={m.blocks} />}
                         <div className="mt-3 flex items-center justify-between gap-2 border-t border-cream-200 pt-2.5">
@@ -559,7 +593,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                               data-testid="speak-button"
                               aria-label={speak.speakingId === m.id ? "Stop speaking" : "Speak response"}
                               onClick={() =>
-                                speak.speakingId === m.id ? speak.stop() : speak.speak(m.id, m.text ?? "")
+                                speak.speakingId === m.id ? speak.stop() : speak.speak(m.id, speechSummary(m))
                               }
                               className="flex items-center gap-1.5 rounded-full border border-navy-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-navy-700 transition hover:border-navy-400"
                             >

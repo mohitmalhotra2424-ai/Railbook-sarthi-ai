@@ -30,9 +30,15 @@ const sseWithCards = [
 test("card actions: Check Availability shows loading + blocks duplicates, Check Fare exists", async ({
   page,
 }) => {
-  await page.route("**/api/assistant", (r) =>
-    r.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: sseWithCards }),
-  );
+  let first = true;
+  await page.route("**/api/assistant", async (r) => {
+    if (!first) {
+      // the follow-up turn takes its time so loading states are observable
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+    first = false;
+    await r.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: sseWithCards });
+  });
   await page.goto("/chat");
   await page.getByLabel("Message").fill("fixture trains");
   await page.getByRole("button", { name: "Send" }).click();
@@ -87,4 +93,30 @@ test("train details exposes accessible tabs with panel wiring", async ({ page })
   await expect(panel).toBeVisible();
   await page.getByRole("tab", { name: "Route" }).click();
   await expect(page.getByRole("tab", { name: "Route" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("class chips: tap selects, fires real availability enquiry for that class, keeps association", async ({
+  page,
+}) => {
+  await page.route("**/api/assistant", (r) =>
+    r.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: sseWithCards }),
+  );
+  await page.goto("/chat");
+  await page.getByLabel("Message").fill("fixture trains");
+  await page.getByRole("button", { name: "Send" }).click();
+  const card = page.getByTestId("train-cards").first();
+  await card.waitFor({ timeout: 15_000 });
+
+  const cc = card.getByTestId("class-chip-CC");
+  await expect(cc).toHaveAttribute("aria-pressed", "false");
+  await cc.click();
+
+  // selected state + a real follow-up turn for THIS class
+  await expect(cc).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("chat-message-user")).toHaveCount(2, { timeout: 10_000 });
+  await expect(page.getByTestId("chat-message-user").nth(1)).toContainText("CC seat availability");
+
+  // chips with provider availability show dot+label text (fixture 1st card has none,
+  // but availability chips appear in the result block tables — verify card raw line absent)
+  await expect(card.getByText("CC:", { exact: false })).toHaveCount(0);
 });

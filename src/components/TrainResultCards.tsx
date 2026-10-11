@@ -18,45 +18,104 @@ export interface TrainCard {
   availability?: { classCode: string; status: string; asOf?: string | null }[];
 }
 
+function Dot({ kind }: { kind: ReturnType<typeof availabilityKind> }) {
+  const color =
+    kind === "available"
+      ? "bg-signal-500"
+      : kind === "rac"
+        ? "bg-saffron-500"
+        : kind === "unknown"
+          ? "bg-navy-300"
+          : "bg-alert-500";
+  return <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${color}`} />;
+}
+
 /** Deterministic rendering of structured tool data (UI display only —
  *  no interpretation). Data always originates from provider results.
  *  Fields the provider did not return are labelled "—", never invented.
  *
  *  Button-behavior contract:
- *  - View Details      → real /trains/:id route; opens the details view, no new search.
- *  - Check Availability→ one follow-up through the EXISTING chat turn (LLM +
- *    ToolRuntime decide); visible loading state, duplicate-click protected.
- *  - Check Fare        → same contract, fare question for train + route.
+ *  - Class chips  → DEFAULT / SELECTED / LOADING / DISABLED. Tapping a class
+ *    selects it for follow-up enquiries AND (when that class has no returned
+ *    availability) fires a real availability enquiry through the existing
+ *    chat turn — loading tracks the actual turn (busy prop), never a fake
+ *    timer. Selection is honoured by Check Fare / Check Availability.
+ *  - View Details → real /trains/:id route; opens details, no new search,
+ *    no accidental selection; conversation is preserved.
+ *  - Check Availability (primary) / Check Fare (secondary) → one follow-up
+ *    through the EXISTING chat turn; visible loading + duplicate protection.
  *  No success is simulated — the real assistant answer (or error) follows. */
 export function TrainResultCards({
   cards,
   onAsk,
+  busy = false,
 }: {
   cards: TrainCard[];
   /** Sends a natural-language follow-up through the existing chat turn. */
   onAsk?: (question: string) => void;
+  /** True while a chat turn is in flight — drives chip/button loading states. */
+  busy?: boolean;
 }) {
   if (cards.length === 0) return null;
   return (
     <ul className="mt-3 space-y-2.5" data-testid="train-cards">
       {cards.map((c) => (
-        <TrainCardView key={`${c.trainNumber}-${c.departure}`} c={c} onAsk={onAsk} />
+        <TrainCardView key={`${c.trainNumber}-${c.departure}`} c={c} onAsk={onAsk} busy={busy} />
       ))}
     </ul>
   );
 }
 
-function TrainCardView({ c, onAsk }: { c: TrainCard; onAsk?: (q: string) => void }) {
-  const [pending, setPending] = useState<null | "availability" | "fare">(null);
+function TrainCardView({
+  c,
+  onAsk,
+  busy,
+}: {
+  c: TrainCard;
+  onAsk?: (q: string) => void;
+  busy: boolean;
+}) {
+  const [pendingActionRaw, setPendingAction] = useState<null | "availability" | "fare">(null);
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const [pendingClassRaw, setPendingClass] = useState<string | null>(null);
+
+  // Loading states track the REAL turn: when the chat is no longer busy the
+  // in-flight marker clears (result or error will be visible in the thread).
+  const pendingAction = busy ? pendingActionRaw : null;
+  const pendingClass = busy ? pendingClassRaw : null;
+
   const fromCode = stationCode(c.from);
   const toCode = stationCode(c.to);
+  const fareClass = selectedClass ?? c.classes?.[0];
 
-  /** Duplicate-click protection: one in-flight ask per card. */
   const askOnce = (which: "availability" | "fare", question: string) => {
-    if (pending || !onAsk) return;
-    setPending(which);
+    if (busy || pendingAction || !onAsk) return; // duplicate-click protection
+    setPendingAction(which);
     onAsk(question);
   };
+
+  const availabilityQuestion = (cls?: string) =>
+    `${c.trainNumber} ${fromCode || c.from} se ${toCode || c.to} ${cls ? `${cls} ` : ""}seat availability${
+      c.journeyDate ? ` (${c.journeyDate})` : ""
+    }?`;
+
+  /** Class chip tap: select for follow-ups; if this class has no returned
+   *  availability yet, run a real enquiry through the existing turn. */
+  const onClassTap = (cls: string) => {
+    if (busy) return;
+    setSelectedClass(cls);
+    const has = c.availability?.some((a) => a.classCode === cls);
+    if (!has && onAsk) {
+      setPendingClass(cls);
+      onAsk(availabilityQuestion(cls));
+    }
+  };
+
+  // Chips come only from the authoritative result (classes ∪ returned availability).
+  const chipClasses = [
+    ...(c.classes ?? []),
+    ...(c.availability ?? []).map((a) => a.classCode).filter((x) => !(c.classes ?? []).includes(x)),
+  ];
 
   return (
     <li className="overflow-hidden rounded-2xl border border-cream-300 bg-white shadow-sm">
@@ -98,35 +157,64 @@ function TrainCardView({ c, onAsk }: { c: TrainCard; onAsk?: (q: string) => void
         </div>
       </div>
 
-      {/* Class / availability details */}
-      {c.availability && c.availability.length > 0 ? (
-        <ul className="space-y-1 border-t border-cream-200 px-3.5 py-2.5" data-testid="card-classes">
-          {c.availability.map((a) => {
-            const kind = availabilityKind(a.status);
-            return (
-              <li key={a.classCode} className="flex items-center gap-2 text-[11px]">
-                <span className="w-8 shrink-0 rounded-md bg-navy-50 px-1.5 py-0.5 text-center font-bold text-navy-700">
-                  {a.classCode}
-                </span>
-                <span className={`rounded-full border px-2 py-0.5 font-semibold ${KIND_PILL[kind]}`}>
-                  {KIND_LABEL[kind]}
-                </span>
-                <span className="min-w-0 truncate font-medium text-navy-700">{a.status}</span>
-              </li>
-            );
-          })}
-        </ul>
-      ) : c.classes && c.classes.length > 0 ? (
-        <div className="flex flex-wrap gap-1 border-t border-cream-200 px-3.5 py-2.5" data-testid="card-classes">
-          {c.classes.map((cls) => (
-            <span key={cls} className="rounded-md bg-navy-50 px-2 py-0.5 text-[10px] font-semibold text-navy-700">
-              {cls}
-            </span>
-          ))}
+      {/* Class chips (interactive) + availability association */}
+      {chipClasses.length > 0 && (
+        <div className="border-t border-cream-200 px-3.5 py-2.5">
+          <div
+            role="group"
+            aria-label={`Travel classes for train ${c.trainNumber}`}
+            className="flex flex-wrap gap-1.5"
+            data-testid="card-classes"
+          >
+            {chipClasses.map((cls) => {
+              const av = c.availability?.find((a) => a.classCode === cls);
+              const kind = av ? availabilityKind(av.status) : null;
+              const isSelected = selectedClass === cls;
+              const isLoading = pendingClass === cls && busy;
+              return (
+                <button
+                  key={cls}
+                  type="button"
+                  data-testid={`class-chip-${cls}`}
+                  aria-pressed={isSelected}
+                  aria-label={
+                    kind
+                      ? `Class ${cls}, ${KIND_LABEL[kind]}${isSelected ? ", selected" : ""}`
+                      : `Class ${cls}${isSelected ? ", selected" : ""}`
+                  }
+                  disabled={busy}
+                  onClick={() => onClassTap(cls)}
+                  className={`flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 ${
+                    isSelected
+                      ? "border-navy-800 bg-navy-800 text-white"
+                      : "border-cream-300 bg-white text-navy-800 hover:border-navy-400"
+                  }`}
+                >
+                  {cls}
+                  {isLoading ? (
+                    <span aria-hidden className="animate-pulse text-[10px] font-semibold">…</span>
+                  ) : kind ? (
+                    <>
+                      <Dot kind={kind} />
+                      <span className={isSelected ? "text-white" : KIND_PILL[kind]}>{KIND_LABEL[kind]}</span>
+                    </>
+                  ) : isSelected ? (
+                    <span aria-hidden>✓</span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          {/* Keep the exact provider values attached to train+date+class */}
+          {c.availability && c.availability.length > 0 && (
+            <p className="mt-1.5 text-[10px] font-medium text-navy-500">
+              {c.availability.map((a) => `${a.classCode}: ${a.status}`).join(" · ")}
+            </p>
+          )}
         </div>
-      ) : null}
+      )}
 
-      {/* Actions — view/ask only; booking stays disabled */}
+      {/* Actions — one primary, rest secondary; booking stays disabled */}
       <div className="flex flex-wrap gap-1.5 border-t border-cream-200 bg-cream-100 px-3.5 py-2.5">
         <Link
           href={`/trains/${c.trainNumber}`}
@@ -138,36 +226,29 @@ function TrainCardView({ c, onAsk }: { c: TrainCard; onAsk?: (q: string) => void
           <>
             <button
               type="button"
-              data-testid={pending === "availability" ? "card-availability-loading" : undefined}
-              disabled={pending !== null}
-              aria-busy={pending === "availability"}
-              onClick={() =>
-                askOnce(
-                  "availability",
-                  `${c.trainNumber} ${fromCode || c.from} se ${toCode || c.to} seat availability${
-                    c.journeyDate ? ` (${c.journeyDate})` : ""
-                  }?`,
-                )
-              }
+              data-testid={pendingAction === "availability" ? "card-availability-loading" : undefined}
+              disabled={busy || pendingAction !== null}
+              aria-busy={pendingAction === "availability"}
+              onClick={() => askOnce("availability", availabilityQuestion(selectedClass ?? undefined))}
               className="min-w-[92px] flex-1 rounded-lg bg-navy-800 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-navy-700 disabled:opacity-60"
             >
-              {pending === "availability" ? "Checking availability…" : "Check Availability"}
+              {pendingAction === "availability" ? "Checking availability…" : "Check Availability"}
             </button>
             <button
               type="button"
-              disabled={pending !== null}
-              aria-busy={pending === "fare"}
+              disabled={busy || pendingAction !== null}
+              aria-busy={pendingAction === "fare"}
               onClick={() =>
                 askOnce(
                   "fare",
                   `${c.trainNumber} ${fromCode || c.from} se ${toCode || c.to} ${
-                    c.classes?.[0] ? `${c.classes[0]} ` : ""
+                    fareClass ? `${fareClass} ` : ""
                   }fare kitna hai${c.journeyDate ? ` (${c.journeyDate})` : ""}?`,
                 )
               }
               className="min-w-[92px] flex-1 rounded-lg border border-navy-200 bg-navy-50 px-3 py-2 text-[11px] font-bold text-navy-800 transition hover:border-navy-400 disabled:opacity-60"
             >
-              {pending === "fare" ? "Checking fare…" : "Check Fare"}
+              {pendingAction === "fare" ? "Checking fare…" : "Check Fare"}
             </button>
           </>
         )}
