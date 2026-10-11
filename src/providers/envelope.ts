@@ -23,6 +23,7 @@ export function notConfiguredEnvelope(
     source: NOT_CONFIGURED_SOURCE,
     retrievedAt: now.toISOString(),
     freshness: "unknown",
+    providerTimestamp: null,
     ttlSeconds: 0,
     errors: [
       providerError(
@@ -41,6 +42,8 @@ export function okEnvelope<T>(params: {
   ttlSeconds: number;
   requestId: string;
   retrievedAt?: Date;
+  /** Documented upstream timestamp, when the provider truly supplies one. */
+  providerTimestamp?: string | null;
 }): ResultEnvelope<T> {
   const retrievedAt = (params.retrievedAt ?? new Date()).toISOString();
   const freshness: Freshness = freshnessFor(retrievedAt, params.ttlSeconds);
@@ -48,6 +51,7 @@ export function okEnvelope<T>(params: {
     data: params.data,
     source: params.source,
     retrievedAt,
+    providerTimestamp: params.providerTimestamp ?? null,
     freshness,
     ttlSeconds: params.ttlSeconds,
     errors: [],
@@ -67,6 +71,7 @@ export function errorEnvelope(params: {
     source: params.source,
     retrievedAt: (params.retrievedAt ?? new Date()).toISOString(),
     freshness: "unknown",
+    providerTimestamp: null,
     ttlSeconds: 0,
     errors: params.errors,
     confidence: "low",
@@ -85,6 +90,10 @@ export function validateEnvelopeShape(value: unknown): value is ResultEnvelope<u
   if (!("data" in env)) return false; // data:null is valid; a missing field is not
   if (typeof env.source !== "object" || env.source === null) return false;
   if (typeof env.retrievedAt !== "string" || Number.isNaN(Date.parse(env.retrievedAt))) {
+    return false;
+  }
+  const pts = (env as Record<string, unknown>).providerTimestamp;
+  if (pts !== undefined && pts !== null && typeof pts !== "string") {
     return false;
   }
   if (env.freshness !== "fresh" && env.freshness !== "stale" && env.freshness !== "unknown") {

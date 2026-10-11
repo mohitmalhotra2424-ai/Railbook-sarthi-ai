@@ -28,6 +28,28 @@ export default defineConfig({
       },
     },
     {
+      name: "mobile-390",
+      use: {
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
+      name: "mobile-412",
+      use: {
+        viewport: { width: 412, height: 915 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
+      name: "desktop-1440",
+      use: {
+        viewport: { width: 1440, height: 900 },
+      },
+    },
+    {
       name: "desktop-1280",
       use: {
         browserName: "chromium",

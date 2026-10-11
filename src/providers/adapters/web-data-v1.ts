@@ -387,7 +387,7 @@ async function liveStatus(
   const cacheKey = `live:${num}`;
   const cached = ctx.refresh === true ? undefined : cacheGet<LiveStatus>(cacheKey);
   if (cached) {
-    return okEnvelope({ data: cached, source: SOURCE, ttlSeconds: LIVE_TTL_SECONDS, requestId: ctx.requestId });
+    return okEnvelope({ data: cached, source: SOURCE, ttlSeconds: LIVE_TTL_SECONDS, requestId: ctx.requestId, providerTimestamp: cached.updatedAt });
   }
 
   // 1) RailYatri eta API — daysBack 0 (started today), then 1 (overnight runs).
@@ -400,7 +400,7 @@ async function liveStatus(
         const status = parseLtsPayload(JSON.parse(body) as LtsShape);
         if (status) {
           cacheSet(cacheKey, status, LIVE_TTL_SECONDS * 1000);
-          return okEnvelope({ data: status, source: SOURCE, ttlSeconds: LIVE_TTL_SECONDS, requestId: ctx.requestId });
+          return okEnvelope({ data: status, source: SOURCE, ttlSeconds: LIVE_TTL_SECONDS, requestId: ctx.requestId, providerTimestamp: status.updatedAt });
         }
       } catch {
         // not JSON — fall through to next source
@@ -416,7 +416,7 @@ async function liveStatus(
       const status = parseLtsPayload(lts);
       if (status) {
         cacheSet(cacheKey, status, LIVE_TTL_SECONDS * 1000);
-        return okEnvelope({ data: status, source: SOURCE, ttlSeconds: LIVE_TTL_SECONDS, requestId: ctx.requestId });
+        return okEnvelope({ data: status, source: SOURCE, ttlSeconds: LIVE_TTL_SECONDS, requestId: ctx.requestId, providerTimestamp: status.updatedAt });
       }
     }
   }
@@ -427,7 +427,7 @@ async function liveStatus(
     const status = parseRailenquiry(rePage);
     if (status) {
       cacheSet(cacheKey, status, LIVE_TTL_SECONDS * 1000);
-      return okEnvelope({ data: status, source: SOURCE, ttlSeconds: LIVE_TTL_SECONDS, requestId: ctx.requestId });
+      return okEnvelope({ data: status, source: SOURCE, ttlSeconds: LIVE_TTL_SECONDS, requestId: ctx.requestId, providerTimestamp: status.updatedAt });
     }
   }
 

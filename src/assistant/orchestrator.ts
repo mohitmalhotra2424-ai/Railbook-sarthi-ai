@@ -42,6 +42,7 @@ export type ResultBlock = {
   source?: string;
   freshness?: string;
   retrievedAt?: string;
+  providerTimestamp?: string | null;
 } & (
   | { kind: "availability"; data: import("@/domain/schemas").Availability }
   | { kind: "fare"; data: import("@/domain/schemas").Fare }
@@ -141,6 +142,7 @@ function deriveBlocks(turnResults: ToolResult[]): ResultBlock[] {
       ...(result.source ? { source: result.source.providerId } : {}),
       ...(result.freshness ? { freshness: result.freshness } : {}),
       ...(result.retrievedAt ? { retrievedAt: result.retrievedAt } : {}),
+      providerTimestamp: result.providerTimestamp ?? null,
     });
   }
   return blocks;

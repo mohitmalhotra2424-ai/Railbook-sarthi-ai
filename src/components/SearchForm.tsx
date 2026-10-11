@@ -14,6 +14,7 @@ const EMPTY: ResultEnvelope<TrainSummary[] | null> = {
   source: { providerId: "none", kind: "none", termsRef: "", authorization: "not-configured" },
   retrievedAt: new Date(0).toISOString(),
   freshness: "unknown",
+    providerTimestamp: null,
   ttlSeconds: 0,
   errors: [],
   confidence: "low",

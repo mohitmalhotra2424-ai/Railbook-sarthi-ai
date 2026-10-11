@@ -17,6 +17,11 @@ function Meta({ block }: { block: ResultBlock }) {
       {block.source ? <span>Source: {block.source}</span> : null}
       {block.freshness ? <span>· {block.freshness}</span> : null}
       {block.retrievedAt ? <span>· Last updated: {fmtWhen(block.retrievedAt)}</span> : null}
+      {block.providerTimestamp === null ? (
+        <span className="w-full text-navy-400">Provider timestamp unavailable — freshness cannot be verified.</span>
+      ) : block.providerTimestamp ? (
+        <span>· Provider timestamp: {block.providerTimestamp}</span>
+      ) : null}
     </p>
   );
 }

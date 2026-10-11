@@ -57,6 +57,12 @@ export interface ResultEnvelope<T> {
   source: SourceInfo;
   /** ISO-8601, set by OUR server clock at receipt. */
   retrievedAt: string;
+  /**
+   * Timestamp supplied by the upstream provider, ONLY when genuinely present
+   * and documented (e.g. RailYatri status_as_of). `null` otherwise — never
+   * invented. UI must then say freshness cannot be verified by the provider.
+   */
+  providerTimestamp: string | null;
   /** Computed from retrievedAt + ttlSeconds — never hardcoded (contract-tested). */
   freshness: Freshness;
   ttlSeconds: number;

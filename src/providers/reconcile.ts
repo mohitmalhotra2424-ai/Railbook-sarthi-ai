@@ -135,6 +135,7 @@ export function reconcileEnvelopes<T>(
       data: null,
       source: NOT_CONFIGURED_SOURCE,
       retrievedAt: now.toISOString(),
+      providerTimestamp: null,
       freshness: "unknown",
       ttlSeconds: 0,
       errors: [providerError("UPSTREAM_ERROR", "No provider was invoked.", { retryable: true })],
@@ -151,6 +152,7 @@ export function reconcileEnvelopes<T>(
       data: null,
       source: envelopes[0].source,
       retrievedAt: now.toISOString(),
+      providerTimestamp: envelopes[0].providerTimestamp ?? null,
       freshness: "unknown",
       ttlSeconds: 0,
       errors: allErrors.length
@@ -175,6 +177,7 @@ export function reconcileEnvelopes<T>(
     data: primary.data,
     source: primary.source,
     retrievedAt: primary.retrievedAt,
+    providerTimestamp: primary.providerTimestamp ?? null,
     freshness: primary.freshness,
     ttlSeconds: primary.ttlSeconds,
     errors: allErrors,

@@ -74,6 +74,7 @@ describe("reconcileEnvelopes (requirement 7)", () => {
       source: sourceA,
       retrievedAt: new Date().toISOString(),
       freshness: "unknown",
+    providerTimestamp: null,
       ttlSeconds: 0,
       errors: [providerError("UPSTREAM_ERROR", "boom", { retryable: true })],
       confidence: "low",

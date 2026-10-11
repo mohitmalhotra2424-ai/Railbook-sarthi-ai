@@ -33,7 +33,7 @@ export function EnvelopePanel<T>({
         <h2 className="text-sm font-bold text-navy-900">{title}</h2>
         <div className="flex flex-wrap items-center gap-2">
           <SourceBadge source={envelope.source} />
-          <FreshnessPill freshness={envelope.freshness} retrievedAt={envelope.retrievedAt} />
+          <FreshnessPill freshness={envelope.freshness} retrievedAt={envelope.retrievedAt} providerTimestamp={envelope.providerTimestamp} />
         </div>
       </header>
 

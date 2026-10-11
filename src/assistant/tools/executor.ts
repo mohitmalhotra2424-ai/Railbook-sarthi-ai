@@ -93,6 +93,7 @@ function mapEnvelope<T>(
       authorization: envelope.source.authorization,
     },
     retrievedAt: envelope.retrievedAt,
+    providerTimestamp: envelope.providerTimestamp ?? null,
     freshness: envelope.freshness,
     ...extra,
   };

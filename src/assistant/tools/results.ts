@@ -33,6 +33,8 @@ export interface ToolResult {
   source?: { providerId: string; authorization: "configured" | "not-configured" };
   /** Actual retrieval timestamp when a provider answered. */
   retrievedAt?: string;
+  /** Documented upstream timestamp when the provider truly supplies one. */
+  providerTimestamp?: string | null;
   freshness?: Freshness;
   journeyDate?: string;
   classCode?: string;

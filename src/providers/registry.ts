@@ -103,6 +103,7 @@ export async function executeCapability<T>(
       },
       retrievedAt: new Date().toISOString(),
       freshness: "unknown" as const,
+      providerTimestamp: null,
       ttlSeconds: 0,
       errors: [
         providerError(
@@ -198,6 +199,7 @@ export async function executeCapabilityFailover<T>(
     source: attributed,
     retrievedAt: new Date().toISOString(),
     freshness: "unknown",
+    providerTimestamp: null,
     ttlSeconds: 0,
     errors: failures,
     confidence: "low",
