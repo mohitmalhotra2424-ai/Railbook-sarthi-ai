@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BrandMark } from "./icons";
 import { availabilityKind, KIND_LABEL, KIND_PILL, stationCode } from "./results/status";
 
 export interface TrainCard {
@@ -36,11 +37,14 @@ export function TrainResultCards({
         return (
           <li
             key={`${c.trainNumber}-${c.departure}`}
-            className="rounded-2xl border border-cream-300 bg-cream-50 p-3.5"
+            className="overflow-hidden rounded-2xl border border-cream-300 bg-white shadow-sm"
           >
-            {/* Identity */}
-            <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 text-[13px] leading-snug font-bold text-navy-900">
+            {/* Header */}
+            <div className="flex items-center gap-2.5 border-b border-cream-200 px-3.5 py-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-navy-50 text-navy-700">
+                <BrandMark className="h-4.5 w-4.5" />
+              </span>
+              <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-navy-900">
                 {c.trainNumber} · {c.trainName}
               </p>
               {c.journeyDate && (
@@ -50,30 +54,36 @@ export function TrainResultCards({
               )}
             </div>
 
-            {/* Journey: prominent times, station names + codes, route line */}
-            <div className="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            {/* Journey timeline */}
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3.5 py-3">
               <div className="min-w-0">
+                <p className="truncate text-[11px] font-semibold text-navy-700 [overflow-wrap:anywhere]">
+                  {c.from}
+                </p>
                 <p className="text-lg leading-tight font-bold text-navy-900 tabular-nums" data-testid="card-dep">
                   {c.departure || "—"}
                 </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-navy-600 [overflow-wrap:anywhere]">{c.from}</p>
               </div>
-              <div aria-hidden className="flex flex-col items-center self-center px-0.5">
-                <span className="h-2 w-2 rounded-full border-2 border-navy-400 bg-white" />
-                <span className="my-0.5 h-0.5 w-10 rounded bg-navy-200 sm:w-16" />
-                <span className="h-2 w-2 rounded-full bg-saffron-500" />
+              <div aria-hidden className="flex flex-col items-center self-center px-1">
+                <span className="flex items-center">
+                  <span className="h-1.5 w-1.5 rounded-full bg-navy-400" />
+                  <span className="mx-0.5 w-8 border-t-2 border-dotted border-navy-200 sm:w-14" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-saffron-500" />
+                </span>
               </div>
               <div className="min-w-0 text-right">
+                <p className="truncate text-[11px] font-semibold text-navy-700 [overflow-wrap:anywhere]">
+                  {c.to}
+                </p>
                 <p className="text-lg leading-tight font-bold text-navy-900 tabular-nums" data-testid="card-arr">
                   {c.arrival || "—"}
                 </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-navy-600 [overflow-wrap:anywhere]">{c.to}</p>
               </div>
             </div>
 
-            {/* Travel details: availability by class, else class list */}
+            {/* Class / availability details */}
             {c.availability && c.availability.length > 0 ? (
-              <ul className="mt-2.5 space-y-1" data-testid="card-classes">
+              <ul className="space-y-1 border-t border-cream-200 px-3.5 py-2.5" data-testid="card-classes">
                 {c.availability.map((a) => {
                   const kind = availabilityKind(a.status);
                   return (
@@ -81,9 +91,7 @@ export function TrainResultCards({
                       <span className="w-8 shrink-0 rounded-md bg-navy-50 px-1.5 py-0.5 text-center font-bold text-navy-700">
                         {a.classCode}
                       </span>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 font-semibold ${KIND_PILL[kind]}`}
-                      >
+                      <span className={`rounded-full border px-2 py-0.5 font-semibold ${KIND_PILL[kind]}`}>
                         {KIND_LABEL[kind]}
                       </span>
                       <span className="min-w-0 truncate font-medium text-navy-700">{a.status}</span>
@@ -92,11 +100,11 @@ export function TrainResultCards({
                 })}
               </ul>
             ) : c.classes && c.classes.length > 0 ? (
-              <div className="mt-2.5 flex flex-wrap gap-1" data-testid="card-classes">
+              <div className="flex flex-wrap gap-1 border-t border-cream-200 px-3.5 py-2.5" data-testid="card-classes">
                 {c.classes.map((cls) => (
                   <span
                     key={cls}
-                    className="rounded-md bg-navy-50 px-1.5 py-0.5 text-[10px] font-semibold text-navy-700"
+                    className="rounded-md bg-navy-50 px-2 py-0.5 text-[10px] font-semibold text-navy-700"
                   >
                     {cls}
                   </span>
@@ -105,12 +113,12 @@ export function TrainResultCards({
             ) : null}
 
             {/* Actions — view/ask only; booking stays disabled */}
-            <div className="mt-3 flex flex-wrap gap-1.5 border-t border-cream-200 pt-2.5">
+            <div className="flex gap-2 border-t border-cream-200 bg-cream-100 px-3.5 py-2.5">
               <Link
                 href={`/trains/${c.trainNumber}`}
-                className="rounded-full border border-navy-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-navy-800 transition hover:border-navy-400"
+                className="flex-1 rounded-lg border border-navy-200 bg-white px-3 py-2 text-center text-[11px] font-bold text-navy-800 transition hover:border-navy-400"
               >
-                View details
+                View Details
               </Link>
               {onAsk && (
                 <button
@@ -122,9 +130,9 @@ export function TrainResultCards({
                       }?`,
                     )
                   }
-                  className="rounded-full border border-navy-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-navy-800 transition hover:border-navy-400"
+                  className="flex-1 rounded-lg bg-navy-800 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-navy-700"
                 >
-                  Check availability
+                  Check Availability
                 </button>
               )}
             </div>

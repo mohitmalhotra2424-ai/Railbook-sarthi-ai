@@ -14,6 +14,7 @@ import { ResultBlocks } from "./ResultBlocks";
 import type { ResultBlock } from "@/assistant/orchestrator";
 import {
   ArrowDownIcon,
+  CheckIcon,
   HomeIcon,
   MicIcon,
   PlusIcon,
@@ -128,16 +129,6 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   const lastAutoSpokenRef = useRef<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Narrow Android screens get a shorter placeholder so it never wraps.
-  const [narrow, setNarrow] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(max-width: 400px)").matches,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 400px)");
-    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
 
   const armConfirm = useCallback(() => {
     setConfirmReset(true);
@@ -437,13 +428,14 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
               <Link
                 href="/"
                 aria-label="Back to home"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cream-300 bg-white text-navy-700 transition hover:border-navy-300"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-navy-700 shadow-sm transition hover:bg-navy-50"
               >
                 <HomeIcon className="h-4 w-4" />
               </Link>
-              <p className="truncate text-xs font-bold tracking-wide text-navy-700 uppercase">
-                Railway Assistant
-              </p>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-[13px] font-bold text-navy-900">RailSaarthi AI</p>
+                <p className="truncate text-[10px] font-medium text-navy-500">Railway Assistant</p>
+              </div>
             </div>
             <button
               type="button"
@@ -463,23 +455,46 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
           </div>
 
           {messages.length === 0 && (
-            <div className="pt-4 pb-2 text-center sm:pt-10">
-              <p className="font-display text-xl font-semibold text-navy-900">नमस्ते! Main RailSaarthi हूँ.</p>
-              <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-navy-600">
-                Trains ke baare mein kuch bhi poochhein — Hindi, Hinglish ya English.
-                Live answers sirf authorized providers se aate hain; main kabhi guess
-                nahi karta.
-              </p>
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-                {SUGGESTIONS.map((s) => (
+            <div className="pt-2 pb-2 sm:pt-6">
+              <div className="rounded-2xl border border-cream-300 bg-navy-50 p-4">
+                <p className="text-sm font-bold text-navy-900">Namaste! 🙏</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-navy-700">
+                  Main RailSaarthi AI hoon, aapka Indian Railways ka AI assistant.
+                </p>
+                <p className="mt-2.5 text-[12px] font-semibold text-navy-800">Main aapki madad kar sakta hoon:</p>
+                <ul className="mt-1.5 space-y-1.5">
+                  {[
+                    "Train search aur timings",
+                    "Fare aur travel classes",
+                    "Seat availability",
+                    "Live train status",
+                    "PNR status",
+                  ].map((x) => (
+                    <li key={x} className="flex items-center gap-2 text-[12px] font-medium text-navy-800">
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-navy-600 text-white">
+                        <CheckIcon className="h-2.5 w-2.5" />
+                      </span>
+                      {x}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2.5 text-[12px] text-navy-600">
+                  Aap kuch bhi pooch sakte hain — Hindi, Hinglish ya English mein.
+                </p>
+              </div>
+
+              <p className="mt-4 mb-2 text-[12px] font-bold text-navy-800">Suggested Questions</p>
+              <div className="grid gap-2 min-[420px]:grid-cols-2">
+                {SUGGESTIONS.map((sg) => (
                   <button
-                    key={s}
+                    key={sg}
                     type="button"
                     data-testid="suggestion"
-                    onClick={() => void send(s)}
-                    className="rounded-full border border-cream-300 bg-white px-3.5 py-2 text-[13px] font-medium text-navy-800 transition hover:border-navy-300 hover:bg-navy-50"
+                    onClick={() => void send(sg)}
+                    className="flex items-center justify-between gap-2 rounded-full border border-cream-300 bg-white px-3.5 py-2 text-left text-[12px] font-medium text-navy-800 transition hover:border-navy-300 hover:bg-navy-50"
                   >
-                    {s}
+                    <span className="min-w-0 truncate">{sg}</span>
+                    <span aria-hidden className="text-navy-400">›</span>
                   </button>
                 ))}
               </div>
@@ -492,9 +507,15 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                 {m.role === "user" ? (
                   <div
                     data-testid="chat-message-user"
-                    className="ml-auto w-fit rounded-2xl rounded-br-md bg-navy-600 px-4 py-2.5 text-[15px] leading-relaxed text-white"
+                    className="ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-navy-600 px-4 py-2.5 text-[14px] leading-relaxed text-white"
                   >
                     {m.text}
+                    <p className="mt-1 text-right text-[9px] text-navy-200">
+                      {new Date(Number(m.id.slice(2)) || Date.now()).toLocaleTimeString("en-IN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
                   </div>
                 ) : (
                   <div data-testid="chat-message-assistant" className="space-y-2">
@@ -602,7 +623,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
       {/* Composer — anchored at the bottom, keyboard-aware */}
       <div className="border-t border-cream-300 bg-cream-50">
         {hasVoice && (
-          <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-1.5 px-4 pt-2 text-[11px]">
+          <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-1.5 px-4 pt-2 text-[10px]">
             {voice.supported && (
               <>
                 <button
@@ -610,7 +631,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                   data-testid="voice-lang"
                   aria-label="Voice input language"
                   onClick={() => setVoiceLang((l) => (l === "hi-IN" ? "en-IN" : "hi-IN"))}
-                  className="rounded-full border border-cream-300 bg-white px-2.5 py-1 font-semibold text-navy-600 transition hover:border-navy-300"
+                  className="rounded-full border border-cream-300 bg-white px-2 py-0.5 font-semibold text-navy-600 transition hover:border-navy-300"
                 >
                   {voiceLang === "hi-IN" ? "हिंदी" : "EN"}
                 </button>
@@ -620,7 +641,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                     data-testid="conversation-mode"
                     aria-pressed={conversationMode}
                     onClick={() => setConversationMode((v) => !v)}
-                    className={`rounded-full border px-2.5 py-1 font-semibold transition ${
+                    className={`rounded-full border px-2 py-0.5 font-semibold transition ${
                       conversationMode
                         ? "border-signal-500/40 bg-signal-500/10 text-signal-700"
                         : "border-cream-300 bg-white text-navy-600 hover:border-navy-300"
@@ -647,51 +668,52 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
           </div>
         )}
         <form onSubmit={onSubmit} className="p-3 sm:p-4">
-          <div className="mx-auto flex max-w-2xl flex-col gap-1.5 sm:flex-row sm:items-end">
-            <div className="flex min-w-0 flex-1 items-end gap-1.5">
-            {voice.supported && (
-              <button
-                type="button"
-                data-testid="mic-button"
-                aria-label={
-                  voice.state === "recording" || voice.state === "processing"
-                    ? "Cancel voice input"
-                    : "Start voice input"
-                }
-                disabled={busy}
-                onClick={onMicTap}
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition disabled:opacity-40 ${
-                  voice.state === "recording" || voice.state === "processing"
-                    ? "animate-pulse border-alert-500/50 bg-alert-500/10 text-alert-500"
-                    : "border-cream-300 bg-white text-navy-600 hover:border-navy-400 hover:text-navy-900"
-                }`}
-              >
-                <MicIcon className="h-5 w-5" />
-              </button>
-            )}
-            <textarea
-              ref={composerRef}
-              aria-label="Message"
-              aria-multiline="true"
-              rows={1}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                growComposer();
-              }}
-              onKeyDown={onComposerKeyDown}
-              placeholder={narrow ? "Ask about trains, timings, fares…" : "Ask about trains, timings, fares, availability…"}
-              className="max-h-32 min-w-0 flex-1 resize-none rounded-xl border border-cream-300 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-navy-900 placeholder:text-navy-400 focus:border-navy-400 focus:outline-none"
-            />
+          <div className="mx-auto flex max-w-2xl items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-end rounded-full border border-cream-300 bg-white py-1 pr-1 pl-1 focus-within:border-navy-400">
+              {voice.supported && (
+                <button
+                  type="button"
+                  data-testid="mic-button"
+                  aria-label={
+                    voice.state === "recording" || voice.state === "processing"
+                      ? "Cancel voice input"
+                      : "Start voice input"
+                  }
+                  disabled={busy}
+                  onClick={onMicTap}
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition disabled:opacity-40 ${
+                    voice.state === "recording" || voice.state === "processing"
+                      ? "animate-pulse bg-alert-500/10 text-alert-500"
+                      : "text-navy-500 hover:bg-navy-50 hover:text-navy-800"
+                  }`}
+                >
+                  <MicIcon className="h-4.5 w-4.5" />
+                </button>
+              )}
+              <textarea
+                ref={composerRef}
+                aria-label="Message"
+                aria-multiline="true"
+                rows={1}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  growComposer();
+                }}
+                onKeyDown={onComposerKeyDown}
+                placeholder="Ask about trains, timings, fares…"
+                className="max-h-28 min-w-0 flex-1 resize-none self-center bg-transparent px-2 py-2 text-sm leading-relaxed text-navy-900 placeholder:text-navy-400 focus:outline-none"
+              />
             </div>
             <button
               type="submit"
               disabled={busy || !input.trim()}
               aria-busy={busy}
-              className="flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-navy-600 px-4 text-sm font-semibold text-white transition hover:bg-navy-700 disabled:opacity-40 sm:w-auto"
+              aria-label="Send"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-navy-600 text-white transition hover:bg-navy-500 active:scale-95 disabled:opacity-40"
             >
-              <SendIcon className="h-4 w-4" />
-              {busy ? "Sending…" : "Send"}
+              <SendIcon className="h-4.5 w-4.5" />
+              <span className="sr-only">{busy ? "Sending…" : "Send"}</span>
             </button>
           </div>
         </form>
