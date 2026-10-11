@@ -7,7 +7,7 @@ import {
   type ChatMessage,
   type ChatResponse,
 } from "./llm/client";
-import { conversationStore, ConversationStore } from "./context/store";
+import { conversationStore, ConversationStore, REQUIRED_PASSENGER_FIELDS } from "./context/store";
 import { guardSaveClaims } from "./passengers/save-claim-guard";
 import { SYSTEM_PROMPT } from "./prompts";
 import { executeTool } from "./tools/executor";
@@ -193,6 +193,13 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
   const turnResults: ToolResult[] = [];
   const executedCalls = new Map<string, string>(); // tool+args → correlationId (duplicate guard)
   let iterations = 0;
+  // Prompt 28 — bounded tool-call recovery. When the P26 guard blocks an
+  // unsupported save claim for a field that authoritative state still lists
+  // as missing, ONE additional LLM request may be made this turn asking the
+  // model to use the existing tool. Strictly once per turn, never recursive.
+  let recoveryUsed = false;
+  /** Honest P26 fallback to deliver if the recovery request itself fails. */
+  let recoveryFallback: { text: string; model: string; viaFallback: boolean } | null = null;
 
   while (iterations < MAX_TOOL_ITERATIONS) {
     iterations += 1;
@@ -231,6 +238,22 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
     }
 
     if (!response) {
+      // Prompt 28: if this failed request was the bounded recovery attempt,
+      // the user still gets the honest P26 fallback — never a raw error on
+      // top of an already-corrected turn, and never a false save claim.
+      if (recoveryFallback) {
+        if (params.signal?.aborted) return;
+        store.appendAssistant(conv.id, recoveryFallback.text);
+        yield {
+          type: "message",
+          text: recoveryFallback.text,
+          model: recoveryFallback.model,
+          viaFallback: recoveryFallback.viaFallback,
+          cards: deriveCards(turnResults),
+          blocks: deriveBlocks(turnResults),
+        };
+        return;
+      }
       const code =
         lastError && typeof lastError === "object" && "code" in lastError
           ? String((lastError as { code: unknown }).code)
@@ -283,6 +306,46 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
           turnId,
           blockedFields: guarded.blockedClaims.map((b) => b.field),
         });
+      }
+      // Prompt 28 — bounded recovery trigger. Conditions (all required):
+      //  1. the P26 guard blocked an unsupported save claim this turn;
+      //  2. the claimed field is still missing in authoritative current state;
+      //  3. the validated context supports a legitimate update (form open);
+      //  4. no recovery has been used this turn and the step budget remains.
+      // Exactly ONE extra request; it re-enters the same loop, so any tool
+      // call goes through the existing validation/dispatch/result pipeline.
+      const paxNow = guardSnap?.passengers ?? [];
+      const currentPax = paxNow[paxNow.length - 1] ?? {};
+      const missingNow: readonly string[] = REQUIRED_PASSENGER_FIELDS.filter(
+        (f) => currentPax[f] === undefined,
+      );
+      const recoverable =
+        guarded.adjusted &&
+        !recoveryUsed &&
+        iterations < MAX_TOOL_ITERATIONS &&
+        Boolean(guardSnap?.selection?.classCode) &&
+        guarded.blockedClaims.some((b) =>
+          b.field === "details" ? missingNow.length > 0 : missingNow.includes(b.field),
+        );
+      if (recoverable) {
+        recoveryUsed = true;
+        recoveryFallback = {
+          text: guarded.text,
+          model: usedEndpoint.cfg.model,
+          viaFallback: usedEndpoint.viaFallback,
+        };
+        logger.warn("save-claim recovery: one bounded re-ask", {
+          conversationId: conv.id,
+          turnId,
+          fields: guarded.blockedClaims.map((b) => b.field),
+        });
+        messages.push({ role: "assistant", content: response.content });
+        messages.push({
+          role: "system",
+          content:
+            "RECOVERY: Your last reply claimed a passenger detail was saved, but no UPDATE_PASSENGER call succeeded this turn and that field is still MISSING in the FORM STATE. If the user already supplied the value, call UPDATE_PASSENGER now with exactly that value; if you do not have a valid value, ask the user to repeat it. Never claim a detail is saved without a successful tool result.",
+        });
+        continue;
       }
       store.appendAssistant(conv.id, guarded.text);
       yield {
