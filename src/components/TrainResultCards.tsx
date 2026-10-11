@@ -16,6 +16,10 @@ export interface TrainCard {
   journeyDate?: string;
   /** Per-class availability only when the provider published it. */
   availability?: { classCode: string; status: string; asOf?: string | null }[];
+  /** Provenance: provider id + our retrieval time (+ provider ts when given). */
+  source?: string;
+  retrievedAt?: string;
+  providerTimestamp?: string | null;
 }
 
 function Dot({ kind }: { kind: ReturnType<typeof availabilityKind> }) {
@@ -212,6 +216,19 @@ function TrainCardView({
             </p>
           )}
         </div>
+      )}
+
+      {/* Provenance strip — only facts the pipeline actually has */}
+      {(c.source || c.retrievedAt) && (
+        <p className="border-t border-cream-200 px-3.5 py-1.5 text-[9px] font-medium text-navy-400">
+          {c.source ? `Source: ${c.source}` : ""}
+          {c.retrievedAt ? ` · retrieved ${new Date(c.retrievedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : ""}
+          {c.providerTimestamp === null
+            ? " · provider timestamp unavailable"
+            : c.providerTimestamp
+              ? ` · provider: ${c.providerTimestamp}`
+              : ""}
+        </p>
       )}
 
       {/* Actions — one primary, rest secondary; booking stays disabled */}

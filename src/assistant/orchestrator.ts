@@ -109,6 +109,10 @@ function deriveCards(turnResults: ToolResult[]): TrainCard[] {
         // Only fields the provider actually returned — UI labels missing ones.
         ...(rawClasses && rawClasses.length > 0 ? { classes: rawClasses } : {}),
         ...(typeof result.journeyDate === "string" && result.journeyDate ? { journeyDate: result.journeyDate } : {}),
+        // Provenance on every card: which provider, when we fetched it.
+        ...(result.source ? { source: result.source.providerId } : {}),
+        ...(result.retrievedAt ? { retrievedAt: result.retrievedAt } : {}),
+        ...(result.providerTimestamp !== undefined ? { providerTimestamp: result.providerTimestamp } : {}),
         ...(Array.isArray(row.availability) && row.availability.length > 0
           ? {
               availability: (row.availability as { classCode: string; status: string; asOf?: string | null }[]).map(
