@@ -140,6 +140,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [paxForm, setPaxForm] = useState<PassengerFormState | null>(null);
   const paxPanelRef = useRef<HTMLDivElement | null>(null);
+  const paxOpenRef = useRef(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   // Concurrency safety (Prompt 19): synchronous double-send guard, abortable
@@ -354,13 +355,23 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                   /* ignore */
                 }
                 break;
-              case "passenger_form":
+              case "passenger_form": {
                 // Prompt 25: authoritative selection + form state from the backend
-                setPaxForm({
+                const nextForm: PassengerFormState = {
                   selection: (ev.selection as PassengerFormState["selection"]) ?? null,
                   passengers: (ev.passengers as PassengerFormState["passengers"]) ?? [],
-                });
+                };
+                const wasOpen = paxOpenRef.current;
+                const nowOpen = Boolean(nextForm.selection?.trainNumber);
+                paxOpenRef.current = nowOpen;
+                setPaxForm(nextForm);
+                // The form appears the moment a train is selected (tap, text or
+                // voice) — bring it into view so the user sees it open.
+                if (nowOpen && !wasOpen) {
+                  setTimeout(() => paxPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
+                }
                 break;
+              }
               case "status":
                 if (ev.text === "using_fallback") {
                   patchMsg(assistantId, { viaFallback: true, model: ev.model ? String(ev.model) : undefined });
@@ -461,6 +472,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
     }
     setMessages([]);
     setPaxForm(null);
+    paxOpenRef.current = false;
     setConfirmReset(false);
     setShowJump(false);
     nearBottomRef.current = true;
@@ -746,24 +758,6 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                 {voice.message}
               </p>
             )}
-          </div>
-        )}
-        {paxForm?.selection?.classCode && (
-          <div className="mx-auto max-w-2xl px-4 pt-2">
-            <div className="flex items-center gap-2.5 rounded-2xl border border-cream-300 bg-white px-3.5 py-2.5 shadow-sm">
-              <p className="min-w-0 flex-1 text-[11px] font-medium text-navy-600">
-                {paxForm.selection.trainNumber} · {paxForm.selection.classCode} — passenger details chat / voice mein
-                bataiye ya form mein bharein
-              </p>
-              <button
-                type="button"
-                data-testid="open-passenger-form"
-                onClick={() => paxPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
-                className="shrink-0 rounded-xl bg-navy-900 px-3.5 py-2.5 text-[11px] font-bold text-white transition hover:bg-navy-800"
-              >
-                Passenger form
-              </button>
-            </div>
           </div>
         )}
         <form onSubmit={onSubmit} className="p-3 sm:p-4">

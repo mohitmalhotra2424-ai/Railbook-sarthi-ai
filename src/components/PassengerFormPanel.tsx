@@ -32,7 +32,7 @@ export function PassengerFormPanel({
 }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const sel = state.selection;
-  if (!sel?.classCode) return null; // form opens only after valid train+class
+  if (!sel?.trainNumber) return null; // form appears as soon as a train is selected (tap or chat/voice)
 
   const passengers = state.passengers.length ? state.passengers : [{}];
   const currentComplete = (p: PassengerDraft) =>
@@ -66,7 +66,7 @@ export function PassengerFormPanel({
       <div className="border-b border-cream-200 bg-navy-900 px-3.5 py-2.5">
         <p className="text-[12px] font-bold text-white">Passenger details</p>
         <p className="mt-0.5 text-[10px] text-navy-200">
-          {sel.trainNumber} {sel.trainName ?? ""} · {sel.classCode}
+          {sel.trainNumber} {sel.trainName ?? ""} · {sel.classCode ?? "class not selected yet"}
           {sel.journeyDate ? ` · ${sel.journeyDate}` : ""}
           {sel.from && sel.to ? ` · ${sel.from} → ${sel.to}` : ""} — data collection & review only; booking disabled.
         </p>
@@ -93,7 +93,7 @@ export function PassengerFormPanel({
           </div>
           <div>
             <dt className="text-navy-500">Class</dt>
-            <dd className="font-semibold text-navy-900">{sel.classCode}</dd>
+            <dd className="font-semibold text-navy-900">{sel.classCode ?? "Not selected yet"}</dd>
           </div>
         </dl>
         <ul className="mt-1.5 space-y-0.5">
