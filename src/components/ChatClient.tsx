@@ -428,7 +428,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
               <Link
                 href="/"
                 aria-label="Back to home"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-navy-700 shadow-sm transition hover:bg-navy-50"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-navy-700 shadow-sm transition hover:bg-navy-50"
               >
                 <HomeIcon className="h-4 w-4" />
               </Link>
@@ -534,7 +534,10 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-navy-400 [animation-delay:150ms]" />
                           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-navy-400 [animation-delay:300ms]" />
                         </span>
-                        soch raha hoon…
+                        {(() => {
+                          const running = [...(m.chips ?? [])].reverse().find((c) => c.phase === "running");
+                          return running ? `${TOOL_LABELS[running.tool] ?? running.tool}…` : "soch raha hoon…";
+                        })()}
                       </div>
                     )}
 
@@ -590,6 +593,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                           <button
                             type="button"
                             data-testid="retry-button"
+                            disabled={busy}
                             onClick={() => void send(lastUserMessageRef.current ?? "")}
                             className="mt-2.5 rounded-full border border-navy-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-navy-800 transition hover:bg-navy-50"
                           >
@@ -681,7 +685,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                   }
                   disabled={busy}
                   onClick={onMicTap}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition disabled:opacity-40 ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition disabled:opacity-40 ${
                     voice.state === "recording" || voice.state === "processing"
                       ? "animate-pulse bg-alert-500/10 text-alert-500"
                       : "text-navy-500 hover:bg-navy-50 hover:text-navy-800"

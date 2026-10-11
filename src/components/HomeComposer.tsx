@@ -6,10 +6,10 @@ import { BrandMark, MicIcon, SendIcon } from "./icons";
 import { useVoiceInput } from "./voice/useVoiceInput";
 
 const TRY_ASKING = [
-  "Amritsar se Delhi ki trains",
-  "Kal ki trains aur timings",
-  "3A mein seat availability",
-  "PNR status check karna hai",
+  "Kal Amritsar se Delhi ki trains dikhao",
+  "12014 ka timetable batao",
+  "Is train ki current availability check karo",
+  "3A ka fare batao",
 ];
 
 /**
@@ -98,7 +98,7 @@ export function HomeComposer() {
             type="submit"
             disabled={!value.trim()}
             aria-label="Send to assistant"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-600 text-white transition hover:bg-navy-500 disabled:opacity-40"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy-600 text-white transition hover:bg-navy-500 disabled:opacity-40"
           >
             <SendIcon className="h-4 w-4" />
           </button>

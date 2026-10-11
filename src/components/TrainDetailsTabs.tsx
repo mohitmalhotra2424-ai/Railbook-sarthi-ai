@@ -40,6 +40,8 @@ export function TrainDetailsTabs({
           <button
             key={t}
             role="tab"
+            id={`tab-${t.replace(/[^a-z]/gi, "").toLowerCase()}`}
+            aria-controls={`panel-${t.replace(/[^a-z]/gi, "").toLowerCase()}`}
             aria-selected={tab === t}
             type="button"
             onClick={() => setTab(t)}
@@ -54,7 +56,7 @@ export function TrainDetailsTabs({
         ))}
       </div>
 
-      <div className="mt-3">
+      <div className="mt-3" role="tabpanel" id={`panel-${tab.replace(/[^a-z]/gi, "").toLowerCase()}`} aria-labelledby={`tab-${tab.replace(/[^a-z]/gi, "").toLowerCase()}`}>
         {tab === "Overview" && (
           <div className="space-y-3">
             <EnvelopePanel
