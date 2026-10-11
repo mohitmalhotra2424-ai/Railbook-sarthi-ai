@@ -106,9 +106,10 @@ test("provider-backed results render as cards showing ONLY returned fields (TEST
   const items = cards.locator("li");
   await expect(items).toHaveCount(2);
 
-  // full card: every returned field visible
+  // full card: every returned field visible (number + name render on separate lines)
   const first = items.nth(0);
-  await expect(first).toContainText("12014 · ASR SHTBDI (FIXTURE)");
+  await expect(first).toContainText("12014");
+  await expect(first).toContainText("ASR SHTBDI (FIXTURE)");
   await expect(first).toContainText("04:55");
   await expect(first).toContainText("11:02");
   await expect(first.getByTestId("card-classes")).toContainText("CC");

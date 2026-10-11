@@ -206,6 +206,7 @@ it("E: recovery runs only when the form is open, age is missing, and an age save
   const recoveryNote = rec.requests[1]?.messages.at(-1);
   expect(recoveryNote?.role).toBe("system");
   expect(recoveryNote?.content).toContain("RECOVERY");
+  expect(messageText(ev)).toBe("Age 28 save ho gaya.");
   expect(store.get("a29-e")?.passengers[0]?.age).toBe(28);
 });
 

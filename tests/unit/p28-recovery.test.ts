@@ -147,6 +147,7 @@ it("B: unsupported save claim for a genuinely missing field triggers exactly ONE
   expect(recoveryMsgs.at(-1)?.role).toBe("system");
   expect(recoveryMsgs.at(-1)?.content).toContain("RECOVERY");
   expect(recoveryMsgs.at(-2)?.content).toBe(FALSE_CLAIM + "\n\nAb gender batao."); // model sees its own claim
+  expect(messageText(ev)).toBe("Age 28 form mein record ho gayi.");
 });
 
 /* ===== C — recovery tool call uses the existing pipeline ===== */

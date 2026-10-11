@@ -13,17 +13,7 @@ import { TrainResultCards, type TrainCard } from "./TrainResultCards";
 import { PassengerFormPanel, type PassengerFormState } from "./PassengerFormPanel";
 import { ResultBlocks } from "./ResultBlocks";
 import type { ResultBlock } from "@/assistant/orchestrator";
-import {
-  ArrowDownIcon,
-  CheckIcon,
-  HomeIcon,
-  MicIcon,
-  PlusIcon,
-  SendIcon,
-  SpeakerIcon,
-  StopIcon,
-  WarnIcon,
-} from "./icons";
+import { BrandMark, ArrowDownIcon, CheckIcon, MicIcon, PlusIcon, SendIcon, SpeakerIcon, StopIcon, WarnIcon } from "./icons";
 import { availabilityKind, KIND_LABEL } from "./results/status";
 import Link from "next/link";
 import { useVoiceInput } from "./voice/useVoiceInput";
@@ -149,6 +139,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [paxForm, setPaxForm] = useState<PassengerFormState | null>(null);
+  const paxPanelRef = useRef<HTMLDivElement | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   // Concurrency safety (Prompt 19): synchronous double-send guard, abortable
@@ -480,23 +471,28 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Compact chat header: identity + home + reset — fixed above the log */}
-      <div className="px-4 pt-3 sm:px-6">
-        <div className="flex items-center justify-between gap-2 rounded-2xl bg-navy-900 px-2.5 py-2">
-          <div className="flex min-w-0 items-center gap-2">
+      {/* Chat header: brand bar with live status — fixed above the log */}
+      <div className="bg-navy-800 px-4 py-3 sm:px-6">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
             <Link
               href="/"
               aria-label="Back to home"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition hover:bg-navy-900/80"
             >
-              <HomeIcon className="h-4 w-4" />
+              <BrandMark className="h-5 w-5" />
             </Link>
-            <div className="min-w-0 leading-tight">
-              <p className="truncate text-[13px] font-bold text-white">RailSaarthi AI</p>
-              <p className="truncate text-[10px] font-medium text-navy-200">Railway Assistant</p>
-            </div>
+            <p className="truncate text-[15px] font-extrabold text-white">RailSaarthi AI</p>
           </div>
-          <button
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span
+              data-testid="ready-pill"
+              className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-navy-800"
+            >
+              <span aria-hidden className={`h-2 w-2 rounded-full ${busy ? "animate-pulse bg-saffron-500" : "bg-signal-500"}`} />
+              {busy ? "Thinking…" : "Ready"}
+            </span>
+            <button
             type="button"
             data-testid="new-chat"
             aria-label="Start a new conversation"
@@ -510,7 +506,8 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
           >
             <PlusIcon className="h-3.5 w-3.5" />
             {confirmReset ? "Confirm new chat?" : "New chat"}
-          </button>
+            </button>
+          </div>
         </div>
       </div>
       {/* Conversation surface */}
@@ -679,11 +676,13 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
           ))}
 
           {paxForm && (
-            <PassengerFormPanel
-              state={paxForm}
-              conversationId={conversationIdRef.current}
-              onState={setPaxForm}
-            />
+            <div ref={paxPanelRef}>
+              <PassengerFormPanel
+                state={paxForm}
+                conversationId={conversationIdRef.current}
+                onState={setPaxForm}
+              />
+            </div>
           )}
         </div>
 
@@ -749,6 +748,24 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
             )}
           </div>
         )}
+        {paxForm?.selection?.classCode && (
+          <div className="mx-auto max-w-2xl px-4 pt-2">
+            <div className="flex items-center gap-2.5 rounded-2xl border border-cream-300 bg-white px-3.5 py-2.5 shadow-sm">
+              <p className="min-w-0 flex-1 text-[11px] font-medium text-navy-600">
+                {paxForm.selection.trainNumber} · {paxForm.selection.classCode} — passenger details chat / voice mein
+                bataiye ya form mein bharein
+              </p>
+              <button
+                type="button"
+                data-testid="open-passenger-form"
+                onClick={() => paxPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                className="shrink-0 rounded-xl bg-navy-900 px-3.5 py-2.5 text-[11px] font-bold text-white transition hover:bg-navy-800"
+              >
+                Passenger form
+              </button>
+            </div>
+          </div>
+        )}
         <form onSubmit={onSubmit} className="p-3 sm:p-4">
           <div className="mx-auto flex max-w-2xl items-center gap-2">
             <div className="flex min-w-0 flex-1 items-end rounded-full border border-cream-300 bg-white py-1 pr-1 pl-1 focus-within:border-navy-400">
@@ -783,7 +800,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                   growComposer();
                 }}
                 onKeyDown={onComposerKeyDown}
-                placeholder="Ask about trains, timings, fares…"
+                placeholder="Type your journey…"
                 className="max-h-28 min-w-0 flex-1 resize-none self-center bg-transparent px-2 py-2 text-sm leading-relaxed text-navy-900 placeholder:text-navy-400 focus:outline-none"
               />
             </div>

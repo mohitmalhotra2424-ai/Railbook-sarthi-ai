@@ -176,3 +176,11 @@ export function ChatIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function ChevronDownIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

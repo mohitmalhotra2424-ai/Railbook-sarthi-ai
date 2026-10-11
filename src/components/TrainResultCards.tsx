@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useState } from "react";
-import { BrandMark } from "./icons";
-import { availabilityKind, KIND_LABEL, KIND_PILL, stationCode } from "./results/status";
+import { ChevronDownIcon } from "./icons";
+import { availabilityKind, KIND_LABEL, stationCode } from "./results/status";
 import { CheckIcon } from "./icons";
 
 export interface TrainCard {
@@ -21,18 +21,6 @@ export interface TrainCard {
   source?: string;
   retrievedAt?: string;
   providerTimestamp?: string | null;
-}
-
-function Dot({ kind }: { kind: ReturnType<typeof availabilityKind> }) {
-  const color =
-    kind === "available"
-      ? "bg-signal-500"
-      : kind === "rac"
-        ? "bg-saffron-500"
-        : kind === "unknown"
-          ? "bg-navy-300"
-          : "bg-alert-500";
-  return <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${color}`} />;
 }
 
 /** Deterministic rendering of structured tool data (UI display only —
@@ -134,60 +122,64 @@ function TrainCardView({
   ];
 
   return (
-    <li className="overflow-hidden rounded-2xl border border-cream-300 bg-white shadow-sm">
-      {/* Header */}
-      <div className="flex items-center gap-2.5 border-b border-cream-200 px-3.5 py-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-navy-50 text-navy-700">
-          <BrandMark className="h-4.5 w-4.5" />
-        </span>
-        <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-navy-900">
-          {c.trainNumber} · {c.trainName}
-        </p>
-        {selected && (
-          <span
-            data-testid="card-selected"
-            className="flex shrink-0 items-center gap-1 rounded-full bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold text-signal-700"
-          >
-            <CheckIcon className="h-2.5 w-2.5" /> Selected
-          </span>
-        )}
-        {c.journeyDate && (
-          <p className="shrink-0 text-[10px] font-semibold text-navy-500" data-testid="card-journey-date">
-            {c.journeyDate}
-          </p>
-        )}
+    <li
+      className={`overflow-hidden bg-white shadow-sm ${
+        selected ? "rounded-2xl border-2 border-navy-900" : "rounded-2xl border border-cream-300"
+      }`}
+    >
+      {/* Header — number + name | selected pill (reference layout) */}
+      <div className="flex items-start justify-between gap-2 px-4 pt-3.5">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold text-navy-700 tabular-nums">{c.trainNumber}</p>
+          <p className="truncate text-[15px] font-extrabold text-navy-900">{c.trainName}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+          {selected && (
+            <span
+              data-testid="card-selected"
+              className="flex items-center gap-1 rounded-full bg-cream-200 px-2.5 py-1 text-[10px] font-bold text-navy-800"
+            >
+              <CheckIcon className="h-2.5 w-2.5" /> Selected
+            </span>
+          )}
+          {c.journeyDate && (
+            <span className="text-[10px] font-semibold text-navy-500" data-testid="card-journey-date">
+              {c.journeyDate}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Journey timeline */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3.5 py-3">
+      {/* Times + route line */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-2 pb-3">
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-semibold text-navy-700 [overflow-wrap:anywhere]">{c.from}</p>
-          <p className="text-lg leading-tight font-bold text-navy-900 tabular-nums" data-testid="card-dep">
+          <p className="text-[22px] leading-tight font-extrabold text-navy-900 tabular-nums" data-testid="card-dep">
             {c.departure || "—"}
           </p>
+          <p className="mt-0.5 truncate text-[11px] font-medium text-navy-500 [overflow-wrap:anywhere]">{c.from}</p>
         </div>
-        <div aria-hidden className="flex flex-col items-center self-center px-1">
-          <span className="flex items-center">
-            <span className="h-1.5 w-1.5 rounded-full bg-navy-400" />
-            <span className="mx-0.5 w-8 border-t-2 border-dotted border-navy-200 sm:w-14" />
-            <span className="h-1.5 w-1.5 rounded-full bg-saffron-500" />
+        <div aria-hidden className="flex items-center self-center px-1 pb-4">
+          <span className="flex w-16 items-center sm:w-24">
+            <span className="h-2.5 w-2.5 rounded-full border-2 border-navy-700 bg-white" />
+            <span className="flex-1 border-t-2 border-navy-200" />
+            <span className="h-2.5 w-2.5 rounded-full bg-navy-800" />
           </span>
         </div>
         <div className="min-w-0 text-right">
-          <p className="truncate text-[11px] font-semibold text-navy-700 [overflow-wrap:anywhere]">{c.to}</p>
-          <p className="text-lg leading-tight font-bold text-navy-900 tabular-nums" data-testid="card-arr">
+          <p className="text-[22px] leading-tight font-extrabold text-navy-900 tabular-nums" data-testid="card-arr">
             {c.arrival || "—"}
           </p>
+          <p className="mt-0.5 truncate text-[11px] font-medium text-navy-500 [overflow-wrap:anywhere]">{c.to}</p>
         </div>
       </div>
 
-      {/* Class chips (interactive) + availability association */}
+      {/* Class boxes — code + exact provider availability (no invention) */}
       {chipClasses.length > 0 && (
-        <div className="border-t border-cream-200 px-3.5 py-2.5">
+        <div className="px-4 pb-3">
           <div
             role="group"
             aria-label={`Travel classes for train ${c.trainNumber}`}
-            className="flex flex-wrap gap-1.5"
+            className="flex flex-wrap gap-2"
             data-testid="card-classes"
           >
             {chipClasses.map((cls) => {
@@ -208,39 +200,26 @@ function TrainCardView({
                   }
                   disabled={busy}
                   onClick={() => onClassTap(cls)}
-                  className={`flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 ${
-                    isSelected
-                      ? "border-navy-800 bg-navy-800 text-white"
-                      : "border-cream-300 bg-white text-navy-800 hover:border-navy-400"
+                  className={`min-w-[86px] rounded-xl px-3 py-2 text-left transition disabled:opacity-50 ${
+                    isSelected ? "border-2 border-navy-900 bg-white" : "border border-cream-300 bg-cream-50 hover:border-navy-400"
                   }`}
                 >
-                  {cls}
+                  <span className="block text-[12px] font-extrabold text-navy-900">{cls}</span>
                   {isLoading ? (
-                    <span aria-hidden className="animate-pulse text-[10px] font-semibold">…</span>
-                  ) : kind ? (
-                    <>
-                      <Dot kind={kind} />
-                      <span className={isSelected ? "text-white" : KIND_PILL[kind]}>{KIND_LABEL[kind]}</span>
-                    </>
-                  ) : isSelected ? (
-                    <span aria-hidden>✓</span>
+                    <span className="block animate-pulse text-[10px] font-semibold text-navy-500">…</span>
+                  ) : av ? (
+                    <span className="block text-[10px] font-bold text-saffron-600">{av.status}</span>
                   ) : null}
                 </button>
               );
             })}
           </div>
-          {/* Keep the exact provider values attached to train+date+class */}
-          {c.availability && c.availability.length > 0 && (
-            <p className="mt-1.5 text-[10px] font-medium text-navy-500">
-              {c.availability.map((a) => `${a.classCode}: ${a.status}`).join(" · ")}
-            </p>
-          )}
         </div>
       )}
 
       {/* Provenance strip — only facts the pipeline actually has */}
       {(c.source || c.retrievedAt) && (
-        <p className="border-t border-cream-200 px-3.5 py-1.5 text-[9px] font-medium text-navy-400">
+        <p className="border-t border-cream-200 px-4 py-1.5 text-[9px] font-medium text-navy-400">
           {c.source ? `Source: ${c.source}` : ""}
           {c.retrievedAt ? ` · retrieved ${new Date(c.retrievedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : ""}
           {c.providerTimestamp === null
@@ -251,23 +230,36 @@ function TrainCardView({
         </p>
       )}
 
-      {/* Actions — one primary, rest secondary; booking stays disabled */}
-      <div className="flex flex-wrap gap-1.5 border-t border-cream-200 bg-cream-100 px-3.5 py-2.5">
+      {/* Actions — primary select CTA; details link; real enquiries stay secondary */}
+      <div className="flex flex-wrap items-center gap-2.5 border-t border-cream-200 bg-cream-50 px-4 py-3">
+        {onAsk && (
+          <button
+            type="button"
+            data-testid="card-select-train"
+            disabled={busy || selected}
+            onClick={() => onAsk(`${c.trainNumber} select karo`)}
+            className={`rounded-xl px-4 py-2.5 text-[12px] font-bold transition ${
+              selected ? "bg-signal-500/10 text-signal-700" : "bg-navy-900 text-white hover:bg-navy-800 disabled:opacity-60"
+            }`}
+          >
+            {selected ? "Selected ✓" : "Select train"}
+          </button>
+        )}
         <Link
           href={`/trains/${c.trainNumber}`}
-          className="min-w-[92px] flex-1 rounded-lg border border-navy-200 bg-white px-3 py-2 text-center text-[11px] font-bold text-navy-800 transition hover:border-navy-400"
+          className="flex items-center gap-1 text-[12px] font-bold text-navy-800 transition hover:text-navy-600"
         >
-          View Details
+          Details <ChevronDownIcon className="h-3 w-3" />
         </Link>
         {onAsk && (
-          <>
+          <div className="ml-auto flex gap-1.5">
             <button
               type="button"
               data-testid={pendingAction === "availability" ? "card-availability-loading" : undefined}
               disabled={busy || pendingAction !== null}
               aria-busy={pendingAction === "availability"}
               onClick={() => askOnce("availability", availabilityQuestion(selectedClass ?? undefined))}
-              className="min-w-[92px] flex-1 rounded-lg bg-navy-800 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-navy-700 disabled:opacity-60"
+              className="rounded-full border border-navy-200 bg-white px-3 py-1.5 text-[10px] font-bold text-navy-800 transition hover:border-navy-400 disabled:opacity-50"
             >
               {pendingAction === "availability" ? "Checking availability…" : "Check Availability"}
             </button>
@@ -283,11 +275,11 @@ function TrainCardView({
                   }fare kitna hai${c.journeyDate ? ` (${c.journeyDate})` : ""}?`,
                 )
               }
-              className="min-w-[92px] flex-1 rounded-lg border border-navy-200 bg-navy-50 px-3 py-2 text-[11px] font-bold text-navy-800 transition hover:border-navy-400 disabled:opacity-60"
+              className="rounded-full border border-navy-200 bg-white px-3 py-1.5 text-[10px] font-bold text-navy-800 transition hover:border-navy-400 disabled:opacity-50"
             >
               {pendingAction === "fare" ? "Checking fare…" : "Check Fare"}
             </button>
-          </>
+          </div>
         )}
       </div>
     </li>
