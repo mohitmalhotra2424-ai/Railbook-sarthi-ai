@@ -67,8 +67,62 @@ export function PassengerFormPanel({
         <p className="text-[12px] font-bold text-white">Passenger details</p>
         <p className="mt-0.5 text-[10px] text-navy-200">
           {sel.trainNumber} {sel.trainName ?? ""} · {sel.classCode}
-          {sel.journeyDate ? ` · ${sel.journeyDate}` : ""} — data collection & review only; booking disabled.
+          {sel.journeyDate ? ` · ${sel.journeyDate}` : ""}
+          {sel.from && sel.to ? ` · ${sel.from} → ${sel.to}` : ""} — data collection & review only; booking disabled.
         </p>
+      </div>
+
+      {/* Prompt 30 — verified final review: authoritative state only, nothing fabricated. */}
+      <div className="border-b border-cream-200 bg-cream-100 px-3.5 py-2.5" data-testid="journey-review">
+        <p className="text-[10px] font-bold text-navy-900">Journey review</p>
+        <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+          <div>
+            <dt className="text-navy-500">Train</dt>
+            <dd className="font-semibold text-navy-900">
+              {sel.trainNumber}
+              {sel.trainName ? ` — ${sel.trainName}` : ""}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-navy-500">Date</dt>
+            <dd className="font-semibold text-navy-900">{sel.journeyDate ?? "Not confirmed"}</dd>
+          </div>
+          <div>
+            <dt className="text-navy-500">Route</dt>
+            <dd className="font-semibold text-navy-900">{sel.from && sel.to ? `${sel.from} → ${sel.to}` : "Not confirmed"}</dd>
+          </div>
+          <div>
+            <dt className="text-navy-500">Class</dt>
+            <dd className="font-semibold text-navy-900">{sel.classCode}</dd>
+          </div>
+        </dl>
+        <ul className="mt-1.5 space-y-0.5">
+          {passengers.map((p, i) => {
+            const missing = REQUIRED_PASSENGER_FIELDS.filter((f) => p[f] === undefined);
+            return (
+              <li key={i} className="flex items-center gap-1.5 text-[10px]" data-testid={`review-pax-${i + 1}`}>
+                {missing.length === 0 ? (
+                  <>
+                    <CheckIcon className="h-3 w-3 text-signal-500" />
+                    <span className="font-semibold text-signal-700">Passenger {i + 1} complete</span>
+                  </>
+                ) : (
+                  <>
+                    <WarnIcon className="h-3 w-3 text-saffron-500" />
+                    <span className="text-navy-700">
+                      Passenger {i + 1} — missing: <b>{missing.join(", ")}</b>
+                    </span>
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {passengers.every(currentComplete) && (
+          <p className="mt-1.5 text-[9px] font-semibold text-navy-600" data-testid="review-ready">
+            All required details saved. Review only — booking execution is disabled.
+          </p>
+        )}
       </div>
 
       {passengers.map((p, i) => {

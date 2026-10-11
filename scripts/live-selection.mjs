@@ -76,6 +76,16 @@ const t5b = await turn(cid, "Male");
 const p5b = t5b.forms.at(-1)?.passengers?.[0];
 check("L5b gender collected — required field set complete (name+age+gender)", !t5b.err && p5b?.gender === "male" && p5b?.name === "Rahul Sharma", `pax=${JSON.stringify(p5b ?? {})} tools=${t5b.tools.join(",")} text=${t5b.text.slice(0, 120)}`);
 
+// P30: final booking-review readiness — authoritative form event must carry the
+// full journey (train/date/class) + every required passenger field saved.
+const revSel = t5b.forms.at(-1)?.selection;
+check(
+  "L8 final review data complete (train+date+class+all required pax saved)",
+  !t5b.err && Boolean(revSel?.trainNumber) && Boolean(revSel?.classCode) && Boolean(revSel?.journeyDate) &&
+    Boolean(p5b?.name) && p5b?.age !== undefined && Boolean(p5b?.gender),
+  `sel=${revSel?.trainNumber ?? "-"}/${revSel?.classCode ?? "-"}/${revSel?.journeyDate ?? "-"} paxComplete=${Boolean(p5b?.name && p5b?.age !== undefined && p5b?.gender)}`,
+);
+
 const t6 = await turn(cid, "Maine naam galat bola — Rahul nahi, Rohit Sharma hai.");
 const p6 = t6.forms.at(-1)?.passengers?.[0];
 check("L6 natural correction overwrites same field", !t6.err && p6?.name === "Rohit Sharma" && p6?.age === 28, `pax=${JSON.stringify(p6 ?? {})} tools=${t6.tools.join(",")}`);

@@ -98,3 +98,32 @@ test("New Chat clears the passenger form — no state leak into a fresh conversa
   await expect(page.getByTestId("passenger-form")).toHaveCount(0);
   await expect(page.getByLabel("Passenger 1 Name")).toHaveCount(0);
 });
+
+test("Prompt 30: journey review shows authoritative selection + per-passenger completion, never fabricated data", async ({ page }) => {
+  // Incomplete passenger: review must name the exact missing fields.
+  await page.route("**/api/assistant", (route) =>
+    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm([{ name: "Rahul Sharma" }]) }),
+  );
+  await page.goto("/chat");
+  await page.getByLabel("Message").fill("select karo");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const review = page.getByTestId("journey-review");
+  await expect(review).toBeVisible({ timeout: 10_000 });
+  await expect(review).toContainText("12951 — Morning Express");
+  await expect(review).toContainText("2026-10-12");
+  await expect(review).toContainText("LDH → NDLS");
+  await expect(review).toContainText("3A");
+  await expect(page.getByTestId("review-pax-1")).toContainText("missing: age, gender");
+  await expect(page.getByTestId("review-ready")).toHaveCount(0); // not complete, no false readiness
+
+  // Complete passenger (fresh load): readiness shown honestly, booking still disabled.
+  await page.route("**/api/assistant", (route) =>
+    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm([{ name: "Rahul Sharma", age: 28, gender: "male" }]) }),
+  );
+  await page.goto("/chat");
+  await page.getByLabel("Message").fill("select karo");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByTestId("review-pax-1")).toContainText("Passenger 1 complete");
+  await expect(page.getByTestId("review-ready")).toContainText("booking execution is disabled");
+});
