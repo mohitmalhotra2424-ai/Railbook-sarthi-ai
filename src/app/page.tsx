@@ -193,7 +193,7 @@ export default function HomePage() {
             { href: "/", label: "Home", icon: HomeIcon, active: true },
             { href: "/chat", label: "Chat", icon: ChatIcon, active: false },
             { href: "/trains", label: "Trains", icon: BrandMark, active: false },
-            { href: "/pnr", label: "PNR", icon: TicketIcon, active: false },
+            { href: "/chat?q=PNR%20status%20check%20karna%20hai", label: "PNR", icon: TicketIcon, active: false },
           ].map((t) => (
             <Link
               key={t.label}
