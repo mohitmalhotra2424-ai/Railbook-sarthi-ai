@@ -319,14 +319,15 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
       const missingNow: readonly string[] = REQUIRED_PASSENGER_FIELDS.filter(
         (f) => currentPax[f] === undefined,
       );
+      // Prompt 29 — recovery is strictly AGE-ONLY: no other passenger field,
+      // no railway tool, no general conversation is ever eligible.
       const recoverable =
         guarded.adjusted &&
         !recoveryUsed &&
         iterations < MAX_TOOL_ITERATIONS &&
-        Boolean(guardSnap?.selection?.classCode) &&
-        guarded.blockedClaims.some((b) =>
-          b.field === "details" ? missingNow.length > 0 : missingNow.includes(b.field),
-        );
+        Boolean(guardSnap?.selection?.classCode) && // form open, session verified
+        missingNow.includes("age") && // age authoritatively still missing
+        guarded.blockedClaims.some((b) => b.field === "age");
       if (recoverable) {
         recoveryUsed = true;
         recoveryFallback = {

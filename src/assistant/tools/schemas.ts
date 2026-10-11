@@ -109,11 +109,39 @@ export const SelectClassArgs = z.object({
   classCode: z.string().min(1).max(4).describe("Travel class code as returned by the provider for the selected train, e.g. 'SL', '3A', '2A', '1A', 'CC'."),
 });
 
-export const UpdatePassengerArgs = z.object({
-  passenger: z.number().int().min(1).max(6).optional().describe("1-based passenger index (default 1)."),
-  field: z.enum(["name", "age", "gender", "berth"]).describe("The passenger field to validate and record."),
-  value: z.string().min(1).describe("The user's answer for that field, verbatim."),
-});
+/**
+ * Prompt 29 — age-only argument compatibility, at the narrowest boundary.
+ * Models occasionally emit the age as a JSON integer (28 instead of "28").
+ * ONLY `field:"age"` with an INTEGER number value is normalized to the
+ * existing string contract; every other field or value type (floats,
+ * booleans, null, arrays, objects) is rejected by this same schema. No rule
+ * is relaxed: the normalized string still goes through validateAge
+ * (whole number, 1-120). Zod-4 superRefine keeps this a ZodObject, so
+ * schema introspection (shape) and the sync test remain valid.
+ */
+export const UpdatePassengerArgs = z
+  .object({
+    passenger: z.number().int().min(1).max(6).optional().describe("1-based passenger index (default 1)."),
+    field: z.enum(["name", "age", "gender", "berth"]).describe("The passenger field to validate and record."),
+    value: z
+      .union([z.string().min(1), z.number().int()], {
+        message: "The user's answer for that field, verbatim.",
+      })
+      .describe("The user's answer for that field, verbatim."),
+  })
+  .superRefine((val, ctx) => {
+    if (typeof val.value === "number") {
+      if (val.field !== "age") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message: "numeric values are only accepted for the age field",
+        });
+        return;
+      }
+      val.value = String(val.value);
+    }
+  });
 
 export const TOOL_ARG_SCHEMAS = {
   SEARCH_TRAINS: SearchTrainsArgs,
