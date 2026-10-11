@@ -8,6 +8,7 @@ import {
   type ChatResponse,
 } from "./llm/client";
 import { conversationStore, ConversationStore } from "./context/store";
+import { guardSaveClaims } from "./passengers/save-claim-guard";
 import { SYSTEM_PROMPT } from "./prompts";
 import { executeTool } from "./tools/executor";
 import { TOOL_DEFINITIONS } from "./tools/schemas";
@@ -256,10 +257,27 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
         return;
       }
       if (params.signal?.aborted) return; // superseded: drop, don't mutate
-      store.appendAssistant(conv.id, response.content);
+      // Prompt 26 — verified save-claim guard: the delivered response may not
+      // claim a passenger field was saved unless this turn's tool results or
+      // the current authoritative form state support it. Text and voice both
+      // consume this single message event, so both channels stay truthful.
+      const guardSnap = store.get(conv.id);
+      const guarded = guardSaveClaims({
+        text: response.content,
+        turnResults,
+        passengers: guardSnap?.passengers ?? [],
+      });
+      if (guarded.adjusted) {
+        logger.warn("save-claim guard replaced an unsupported confirmation", {
+          conversationId: conv.id,
+          turnId,
+          blockedFields: guarded.blockedClaims.map((b) => b.field),
+        });
+      }
+      store.appendAssistant(conv.id, guarded.text);
       yield {
         type: "message",
-        text: response.content,
+        text: guarded.text,
         model: usedEndpoint.cfg.model,
         viaFallback: usedEndpoint.viaFallback,
         cards: deriveCards(turnResults),

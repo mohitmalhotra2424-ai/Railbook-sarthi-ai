@@ -65,6 +65,11 @@ check("L4 name collected & validated into form", !t4.err && p4?.name === "Rahul 
 const t5 = await turn(cid, "Age 28.");
 const p5 = t5.forms.at(-1)?.passengers?.[0];
 check("L5 age collected next, name retained", !t5.err && p5?.age === 28 && p5?.name === "Rahul Sharma", `pax=${JSON.stringify(p5 ?? {})} tools=${t5.tools.join(",")} calls=${t5.calls.join(" | ")} text=${t5.text.slice(0,120)}`);
+// P26 guard: if the model did NOT record the age this turn, the delivered text
+// must not claim it was saved (save-claim guard blocks the false confirmation).
+const ageSavedThisTurn = t5.tools.some((s) => s.startsWith("UPDATE_PASSENGER:ok")) && p5?.age === 28;
+const claimsSaved = /save ho gay|सेव हो ग|saved|save ho chuki/i.test(t5.text);
+check("L5G no unsupported save claim delivered (P26 guard)", ageSavedThisTurn || !claimsSaved, `ageSaved=${ageSavedThisTurn} claimsSaved=${claimsSaved} text=${t5.text.slice(0, 140)}`);
 
 const t6 = await turn(cid, "Maine naam galat bola — Rahul nahi, Rohit Sharma hai.");
 const p6 = t6.forms.at(-1)?.passengers?.[0];
