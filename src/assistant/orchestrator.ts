@@ -245,6 +245,16 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
       return;
     }
 
+    // P27 diagnostic (sanitized): distinguishes "model chose plain text"
+    // (finishReason=stop) from "provider advertised tool_calls but delivered
+    // none" — counts only, never message content or passenger data.
+    logger.info("LLM response shape", {
+      provider: usedEndpoint.cfg.provider,
+      finishReason: response.finishReason,
+      toolCallCount: response.toolCalls.length,
+      contentChars: response.content?.length ?? 0,
+    });
+
     // --- Model answered directly: done ---
     if (response.toolCalls.length === 0) {
       if (!response.content) {
