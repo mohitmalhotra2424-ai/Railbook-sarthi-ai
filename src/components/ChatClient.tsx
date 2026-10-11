@@ -149,6 +149,12 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // Concurrency safety (Prompt 19): synchronous double-send guard, abortable
+  // in-flight turn, and a generation counter so a superseded stream can never
+  // mutate the new conversation (e.g. resurrect an old conversationId).
+  const sendingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const genRef = useRef(0);
   const conversationIdRef = useRef<string | null>(null);
   const lastUserMessageRef = useRef<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -277,9 +283,14 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   const send = useCallback(
     async (raw: string) => {
       const text = raw.trim();
-      if (!text || busy) return;
+      if (!text || busy || sendingRef.current) return; // same-tick double-send guard
+      sendingRef.current = true;
       setInput("");
       setBusy(true);
+      const gen = ++genRef.current;
+      const ac = new AbortController();
+      abortRef.current = ac;
+      const alive = () => genRef.current === gen;
       lastUserMessageRef.current = text;
 
       const assistantId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -332,6 +343,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
               continue;
             }
             const ev = event as unknown as Record<string, unknown> & { type: string };
+            if (!alive()) break; // superseded turn: never touch the new conversation
 
             switch (ev.type) {
               case "conversation":
@@ -394,7 +406,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
             }
           }
         }
-        if (!settled) {
+        if (!settled && alive()) {
           patchMsg(assistantId, {
             thinking: false,
             error: { code: "INCOMPLETE_TURN", message: "The turn ended without an answer.", retryable: true },
@@ -402,13 +414,17 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
           restoreTextOnFailure(text);
         }
       } catch {
-        patchMsg(assistantId, {
-          thinking: false,
-          error: { code: "NETWORK_ERROR", message: "Network error — please retry.", retryable: true },
-        });
-        restoreTextOnFailure(text);
+        if (!ac.signal.aborted && alive()) {
+          patchMsg(assistantId, {
+            thinking: false,
+            error: { code: "NETWORK_ERROR", message: "Network error — please retry.", retryable: true },
+          });
+          restoreTextOnFailure(text);
+        }
+        // aborted/superseded = honest silence, not a fake error
       } finally {
         setBusy(false);
+        sendingRef.current = false;
       }
     },
     [busy, patchMsg, restoreTextOnFailure],
@@ -428,6 +444,8 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   }
 
   function newConversation() {
+    genRef.current += 1; // supersede any in-flight stream
+    abortRef.current?.abort();
     conversationIdRef.current = null;
     try {
       localStorage.removeItem("railsaarthi.cid");

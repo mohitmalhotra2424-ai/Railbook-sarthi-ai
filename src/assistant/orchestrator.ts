@@ -190,6 +190,9 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
 
   while (iterations < MAX_TOOL_ITERATIONS) {
     iterations += 1;
+    // Client left (abort): stop silently — a dead request must never mutate
+    // the store or emit events (Prompt 19 §5).
+    if (params.signal?.aborted) return;
     yield { type: "status", text: "thinking" };
 
     // --- Call the LLM, with a LABELED fallback (never silent, never mock) ---
@@ -247,6 +250,7 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
         };
         return;
       }
+      if (params.signal?.aborted) return; // superseded: drop, don't mutate
       store.appendAssistant(conv.id, response.content);
       yield {
         type: "message",
