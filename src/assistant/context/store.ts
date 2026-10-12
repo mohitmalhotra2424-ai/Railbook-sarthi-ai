@@ -225,9 +225,14 @@ export class ConversationStore {
       if (a.date) conv.journey.date = a.date;
     }
 
-    // Prompt 31: new search/availability/fare data can change booking-critical
-    // facts — any existing review is invalidated (confirmation must not carry over).
-    if (tool === "SEARCH_TRAINS" || tool === "CHECK_AVAILABILITY" || tool === "GET_FARE") {
+    // Prompt 31/32: new search/availability/fare DATA can change booking-critical
+    // facts — any existing review is invalidated (confirmation must not carry
+    // over). A FAILED lookup (error/timeout/unavailable/not_configured) returns
+    // no data and changes no facts, so it must not invalidate the review.
+    if (
+      (result.status === "ok" || result.status === "stale") &&
+      (tool === "SEARCH_TRAINS" || tool === "CHECK_AVAILABILITY" || tool === "GET_FARE")
+    ) {
       conv.review = undefined;
     }
 
