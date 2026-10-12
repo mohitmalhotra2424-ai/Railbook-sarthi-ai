@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { conversationStore, type ConversationStore } from "@/assistant/context/store";
 import { validatePassengerField } from "@/assistant/passengers/validate";
+import { parseTimesFromLabel } from "@/assistant/booking/preparation";
 import { logger } from "@/lib/logger";
 import { isNotConfigured } from "@/providers/envelope";
 import { executeCapabilityFailover } from "@/providers/registry";
@@ -157,6 +158,169 @@ export async function executeTool(
     };
   }
 
+
+  // ---- Prompt 37: deterministic filter/sort over the CURRENT authoritative
+  // search results. Derived view only — the source results are never mutated.
+  if (tool === "FILTER_TRAINS") {
+    const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.FILTER_TRAINS>;
+    const fStore = meta.store ?? conversationStore;
+    const conv = fStore.getOrCreate(meta.conversationId);
+    const searchRefs = conv.results.filter((r) => r.tool === "SEARCH_TRAINS" && !r.supersededBy && r.items?.length);
+    const srcRef = searchRefs[searchRefs.length - 1];
+    if (!srcRef) {
+      return {
+        ...baseResult(tool, meta, "error"),
+        note: "There are no current train search results to filter. Run SEARCH_TRAINS for the user's route/date first.",
+      };
+    }
+    const toMin = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    };
+    type FRow = {
+      index: number;
+      trainNumber: string;
+      trainName: string;
+      departure: string | null;
+      arrival: string | null;
+      durationMin: number | null;
+      classes: string[];
+      fare?: number;
+      fareClass?: string;
+      availabilityStatus?: { classCode: string; status: string };
+    };
+    const rows: FRow[] = srcRef.items!.map((item) => {
+      const times = parseTimesFromLabel(item.label);
+      const dur =
+        times && times.arrival
+          ? (() => {
+              const d = toMin(times.arrival!) - toMin(times.departure);
+              return d <= 0 ? d + 24 * 60 : d; // overnight arrival
+            })()
+          : null;
+      return {
+        index: item.index,
+        trainNumber: item.label.split(" ")[0],
+        trainName: item.label
+          .replace(/^\d+\s+/, "")
+          .replace(/\s+dep\s.*$/, "")
+          .replace(/\s+\[[^\]]*\]$/, "")
+          .trim(),
+        departure: times?.departure ?? null,
+        arrival: times?.arrival ?? null,
+        durationMin: dur,
+        classes: item.classes ?? [],
+      };
+    });
+    let matched = rows.filter((r) => {
+      if (a.classCode && !r.classes.includes(a.classCode)) return false;
+      if (a.departsAfter && (r.departure === null || toMin(r.departure) < toMin(a.departsAfter))) return false;
+      if (a.departsBefore && (r.departure === null || toMin(r.departure) > toMin(a.departsBefore))) return false;
+      if (a.arrivesAfter && (r.arrival === null || toMin(r.arrival) < toMin(a.arrivesAfter))) return false;
+      if (a.arrivesBefore && (r.arrival === null || toMin(r.arrival) > toMin(a.arrivesBefore))) return false;
+      if (a.maxDurationMinutes !== undefined && (r.durationMin === null || r.durationMin > a.maxDurationMinutes)) return false;
+      return true;
+    });
+    // availableOnly: only CURRENT recorded live checks — absence or stale data
+    // excludes the train honestly (never presented as available).
+    let noAvailData = 0;
+    if (a.availableOnly) {
+      matched = matched.filter((r) => {
+        const refs = conv.results.filter(
+          (x) =>
+            x.tool === "CHECK_AVAILABILITY" &&
+            !x.supersededBy &&
+            x.freshness !== "stale" &&
+            x.trainNumber === r.trainNumber &&
+            x.availability?.length,
+        );
+        const entry = refs.length
+          ? refs[refs.length - 1].availability!.find((c) => !a.classCode || c.classCode === a.classCode)
+          : undefined;
+        if (!entry) {
+          noAvailData += 1;
+          return false;
+        }
+        r.availabilityStatus = entry;
+        return true;
+      });
+    }
+    // Fares: only from current, non-superseded GET_FARE results.
+    let faresKnown = 0;
+    for (const r of matched) {
+      const fRefs = conv.results.filter(
+        (x) =>
+          x.tool === "GET_FARE" &&
+          !x.supersededBy &&
+          x.freshness !== "stale" &&
+          x.trainNumber === r.trainNumber &&
+          x.fare &&
+          (!a.classCode || !x.classCode || x.classCode === a.classCode),
+      );
+      const fare = fRefs.length ? fRefs[fRefs.length - 1].fare! : undefined;
+      if (fare) {
+        r.fare = fare.totalFare;
+        r.fareClass = fare.classCode;
+        faresKnown += 1;
+      }
+    }
+    const far = (v: number | null) => (v === null ? Number.MAX_SAFE_INTEGER : v);
+    if (a.sortBy === "duration") matched.sort((x, y) => far(x.durationMin) - far(y.durationMin));
+    else if (a.sortBy === "departure") matched.sort((x, y) => far(x.departure ? toMin(x.departure) : null) - far(y.departure ? toMin(y.departure) : null));
+    else if (a.sortBy === "arrival") matched.sort((x, y) => far(x.arrival ? toMin(x.arrival) : null) - far(y.arrival ? toMin(y.arrival) : null));
+    else if (a.sortBy === "fare") matched.sort((x, y) => far(x.fare ?? null) - far(y.fare ?? null));
+
+    const criteria = [
+      a.classCode ? `class ${a.classCode}` : null,
+      a.availableOnly ? "recorded-available only" : null,
+      a.departsAfter ? `departs ≥${a.departsAfter}` : null,
+      a.departsBefore ? `departs ≤${a.departsBefore}` : null,
+      a.arrivesAfter ? `arrives ≥${a.arrivesAfter}` : null,
+      a.arrivesBefore ? `arrives ≤${a.arrivesBefore}` : null,
+      a.maxDurationMinutes !== undefined ? `duration ≤${a.maxDurationMinutes}m` : null,
+      a.sortBy ? `sorted by ${a.sortBy}` : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const shown = matched.slice(0, 8); // bounded for the LLM context
+    const more = matched.length - shown.length;
+    const list = shown
+      .map(
+        (r, i) =>
+          `${i + 1}) ${r.trainNumber} ${r.trainName}${r.departure ? ` dep ${r.departure}` : ""}${r.arrival ? ` arr ${r.arrival}` : ""}${
+            r.durationMin !== null ? ` (${Math.floor(r.durationMin / 60)}h${String(r.durationMin % 60).padStart(2, "0")}m)` : ""
+          }${r.fare !== undefined ? ` ₹${r.fare}${r.fareClass ? `/${r.fareClass}` : ""}` : ""}${r.availabilityStatus ? ` [${r.availabilityStatus.classCode}:${r.availabilityStatus.status}]` : ""}`,
+      )
+      .join("; ");
+    const extras = [
+      a.sortBy === "fare" ? `Fare known for ${faresKnown}/${matched.length} (unchecked trains listed last; use GET_FARE to fetch real prices).` : null,
+      a.availableOnly
+        ? `Availability shown only from current recorded live checks${noAvailData ? `; ${noAvailData} matching trains had no recorded availability and were excluded — run CHECK_AVAILABILITY to include them` : ""}.`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const note =
+      matched.length === 0
+        ? `0 of ${rows.length} current results match (${criteria}). Nothing was weakened or invented — tell the user honestly and suggest ONE sensible adjustment (wider time window, another class, or dropping a filter), then ask.`
+        : `${matched.length} of ${rows.length} current results match (${criteria}). ${list}${more ? ` (+${more} more matching — the user can select any by train number)` : ""} ${extras} Selection still validates against the FULL authoritative search results.`;
+    const data = matched.map((r) => ({
+      trainNumber: r.trainNumber,
+      trainName: r.trainName,
+      from: { name: srcRef.route?.from ?? "" },
+      to: { name: srcRef.route?.to ?? "" },
+      departure: r.departure ?? undefined,
+      arrival: r.arrival ?? undefined,
+      classes: r.classes.length ? r.classes : undefined,
+      ...(r.availabilityStatus ? { availability: [{ classCode: r.availabilityStatus.classCode, status: r.availabilityStatus.status, asOf: null }] } : {}),
+    }));
+    return {
+      ...baseResult(tool, meta, "ok"),
+      note,
+      data,
+      journeyDate: srcRef.journeyDate,
+    };
+  }
 
   // ---- Prompt 25: application actions — LLM proposes, backend validates ----
   const p25store = meta.store ?? conversationStore;

@@ -371,6 +371,7 @@ it("J: tool schemas/selection unchanged; form validation still authoritative", a
     "CHECK_PNR",
     "GET_CANCELLED_TRAINS",
     "GENERAL_RAILWAY_ANSWER",
+    "FILTER_TRAINS",
     "SELECT_TRAIN",
     "SELECT_CLASS",
     "UPDATE_PASSENGER",

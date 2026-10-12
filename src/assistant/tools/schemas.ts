@@ -34,6 +34,7 @@ export const ToolNames = {
   CHECK_PNR: "CHECK_PNR",
   GET_CANCELLED_TRAINS: "GET_CANCELLED_TRAINS",
   GENERAL_RAILWAY_ANSWER: "GENERAL_RAILWAY_ANSWER",
+  FILTER_TRAINS: "FILTER_TRAINS",
   SELECT_TRAIN: "SELECT_TRAIN",
   SELECT_CLASS: "SELECT_CLASS",
   UPDATE_PASSENGER: "UPDATE_PASSENGER",
@@ -100,6 +101,41 @@ export const GeneralRailwayAnswerArgs = z.object({
   question: z.string().min(1).describe("The general railway question being answered from knowledge (no live data involved)"),
   language: z.enum(["hi", "hinglish", "en"]).optional().describe("Language of the user's question"),
 });
+
+const hhmm = (description: string) =>
+  z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "must be HH:MM (24h)").optional().describe(description);
+
+export const FilterTrainsArgs = z
+  .object({
+    classCode: z
+      .string()
+      .min(1)
+      .max(4)
+      .optional()
+      .describe("Keep only trains that RUN in this class (e.g. '3A', 'SL'). 'Runs in this class' is NOT the same as seats being available."),
+    availableOnly: z
+      .boolean()
+      .optional()
+      .describe("Keep only trains with a CURRENT recorded live availability check (for classCode when given). Uses only recorded authoritative checks — never invents availability."),
+    departsAfter: hhmm("Departure at/after this time — for DEPARTURE-time preferences."),
+    departsBefore: hhmm("Departure at/before this time."),
+    arrivesAfter: hhmm("Arrival at/after this time."),
+    arrivesBefore: hhmm("Arrival at/before this time — for ARRIVAL deadlines like 'reach by morning'."),
+    maxDurationMinutes: z.number().int().min(1).max(4320).optional().describe("Maximum journey duration in minutes."),
+    sortBy: z.enum(["fare", "duration", "departure", "arrival"]).optional().describe("Sort the matching results. 'fare' ranks only trains with a checked fare (others last); 'duration' = fastest first."),
+  })
+  .refine(
+    (a) =>
+      a.classCode ||
+      a.availableOnly ||
+      a.departsAfter ||
+      a.departsBefore ||
+      a.arrivesAfter ||
+      a.arrivesBefore ||
+      a.maxDurationMinutes !== undefined ||
+      a.sortBy,
+    { message: "FILTER_TRAINS needs at least one filter or sortBy" },
+  );
 
 export const SelectTrainArgs = z
   .object({
@@ -173,6 +209,7 @@ export const TOOL_ARG_SCHEMAS = {
   CHECK_PNR: CheckPnrArgs,
   GET_CANCELLED_TRAINS: GetCancelledTrainsArgs,
   GENERAL_RAILWAY_ANSWER: GeneralRailwayAnswerArgs,
+  FILTER_TRAINS: FilterTrainsArgs,
   SELECT_TRAIN: SelectTrainArgs,
   SELECT_CLASS: SelectClassArgs,
   UPDATE_PASSENGER: UpdatePassengerArgs,
@@ -326,6 +363,28 @@ export const TOOL_DEFINITIONS: ChatToolDef[] = [
           language: { type: "string", enum: ["hi", "hinglish", "en"], description: "User's language" },
         },
         required: ["question"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "FILTER_TRAINS",
+      description:
+        "Filter and/or sort the CURRENT search results in the session (no new provider search) for requests like 'sirf 3A', 'subah pahunchne wali', 'sabse sasti', 'sabse jaldi pahunchne wali'. Translate the user's natural words into explicit arguments — do NOT hard-code phrases: classCode for a class ('AC wali' alone is ambiguous — ask which AC class unless the user already said one); departsAfter/departsBefore for DEPARTURE preferences; arrivesAfter/arrivesBefore for ARRIVAL deadlines ('subah pahunchna hai' → arrivesBefore '12:00'); maxDurationMinutes and/or sortBy 'duration' for fastest; sortBy 'fare' for cheapest (only fares already checked with GET_FARE are ranked — check fares first when prices matter); availableOnly only reflects recorded live availability checks. Documented time-of-day convention: morning 04:00–11:59, afternoon 12:00–16:59, evening 17:00–20:59, night 21:00–03:59. Compatible filters combine. The backend never invents fares, availability or trains; when nothing matches it says so.",
+      parameters: {
+        type: "object",
+        properties: {
+          classCode: str("Class the train must run in, e.g. '3A', 'SL', '2A'"),
+          availableOnly: { type: "boolean", description: "Only trains with a current recorded live availability check" },
+          departsAfter: str("Departure at/after HH:MM"),
+          departsBefore: str("Departure at/before HH:MM"),
+          arrivesAfter: str("Arrival at/after HH:MM"),
+          arrivesBefore: str("Arrival at/before HH:MM"),
+          maxDurationMinutes: { type: "integer", description: "Maximum journey duration in minutes" },
+          sortBy: { type: "string", enum: ["fare", "duration", "departure", "arrival"], description: "Sort matching results" },
+        },
+        required: [],
       },
     },
   },

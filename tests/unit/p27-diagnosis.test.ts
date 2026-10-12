@@ -153,7 +153,7 @@ it("A: on the 'Age 28' turn the model DOES receive the tool + full passenger con
   // Stage "tool available": the request carried all 12 tools incl. UPDATE_PASSENGER.
   const req = rec.requests[0];
   expect(req?.tools?.map((t) => t.function.name)).toContain("UPDATE_PASSENGER");
-  expect(req?.tools).toHaveLength(12);
+  expect(req?.tools).toHaveLength(13); // 12 + FILTER_TRAINS (Prompt 37)
   // Stage "context available": system context names the stored passenger and
   // the exact missing fields — nothing stale, nothing absent.
   const ctx = req?.messages[1]?.content ?? "";

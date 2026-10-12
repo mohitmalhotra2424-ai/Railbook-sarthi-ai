@@ -239,6 +239,17 @@ export class ConversationStore {
       }
     }
 
+    // Prompt 37: FILTER_TRAINS views are DERIVED — a newer search or a newer
+    // filtered view supersedes previous FILTER_TRAINS views (selection keeps
+    // validating against the full authoritative SEARCH_TRAINS results only).
+    if (tool === "SEARCH_TRAINS" || tool === "FILTER_TRAINS") {
+      for (const old of conv.results) {
+        if (old.supersededBy || old.tool !== "FILTER_TRAINS") continue;
+        old.supersededBy = refId;
+        old.supersededReason = tool === "SEARCH_TRAINS" ? "newer search results" : "newer filtered view";
+      }
+    }
+
     // Journey context bookkeeping (deterministic, from validated args only).
     if (tool === "SEARCH_TRAINS") {
       if (a.from) conv.journey.from = a.from;
@@ -481,13 +492,22 @@ function compactItems(data: unknown): { index: number; label: string }[] | undef
   if (!Array.isArray(data)) return undefined;
   return data.map((row, i) => {
     const r = row as Record<string, unknown>;
-    const label =
-      [r.trainNumber, r.trainName, r.departure && `dep ${String(r.departure)}`, r.arrival && `arr ${String(r.arrival)}`]
-        .filter(Boolean)
-        .join(" ") || JSON.stringify(row).slice(0, 80);
     const classes = Array.isArray(r.classes)
       ? (r.classes as unknown[]).filter((c): c is string => typeof c === "string").slice(0, 8)
       : undefined;
+    // Prompt 37: append the provider-reported classes so the LLM can reason
+    // about class preferences for the listed rows (suffix keeps the
+    // full-token train-number matching and name extraction intact).
+    const label =
+      [
+        r.trainNumber,
+        r.trainName,
+        r.departure && `dep ${String(r.departure)}`,
+        r.arrival && `arr ${String(r.arrival)}`,
+        classes?.length ? `[${classes.join(",")}]` : null,
+      ]
+        .filter(Boolean)
+        .join(" ") || JSON.stringify(row).slice(0, 80);
     return { index: i + 1, label, ...(classes?.length ? { classes } : {}) };
   });
 }

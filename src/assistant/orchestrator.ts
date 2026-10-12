@@ -101,7 +101,8 @@ function stableStringify(value: unknown): string {
 function deriveCards(turnResults: ToolResult[]): TrainCard[] {
   const cards: TrainCard[] = [];
   for (const result of turnResults) {
-    if (result.tool !== "SEARCH_TRAINS" || result.status !== "ok" || !Array.isArray(result.data)) continue;
+    // Prompt 37: filtered views render the same purpose-built cards.
+    if ((result.tool !== "SEARCH_TRAINS" && result.tool !== "FILTER_TRAINS") || result.status !== "ok" || !Array.isArray(result.data)) continue;
     for (const row of result.data as Record<string, unknown>[]) {
       const from = row.from as { code?: string; name?: string } | undefined;
       const to = row.to as { code?: string; name?: string } | undefined;
