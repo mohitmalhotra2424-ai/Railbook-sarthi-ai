@@ -1,17 +1,18 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Prompt 13 — premium home: explains the product, one CTA into chat, a
- * working composer card that hands off to the REAL chat architecture.
+ * Premium home (UI/UX rebuild): explains the product with a conversation-first
+ * hero, one CTA into chat, a working composer card that hands off to the REAL
+ * chat architecture, capability-checked trust row and honesty promises.
  */
-test("homepage explains the product with CTA, features and honesty promises at 360px", async ({
+test("homepage explains the product with CTA, quick prompts and honesty promises at 360px", async ({
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Plan. Track. Travel.");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("With Your AI Sarthi.");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Your journey starts with");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("a conversation.");
   await expect(
-    page.getByText("Ask anything about Indian Railways in Hindi, Hinglish or English"),
+    page.getByText("Tell RailSaarthi where you want to go", { exact: false }),
   ).toBeVisible();
 
   const cta = page.getByTestId("start-chatting");
@@ -19,15 +20,14 @@ test("homepage explains the product with CTA, features and honesty promises at 3
   const box = await cta.boundingBox();
   expect(box && box.height).toBeGreaterThanOrEqual(44);
 
-  for (const f of [
-    "Find Trains",
-    "Timings & Routes",
-    "Fare & Classes",
-    "Seat Availability",
-    "Live Train Status",
-    "PNR Status",
+  // quick-prompt chips (real handoffs, not fake responses)
+  for (const s of [
+    "Amritsar se Delhi kal",
+    "Morning trains to Delhi",
+    "Check seat availability",
+    "Track my train",
   ]) {
-    await expect(page.getByText(f, { exact: true })).toBeVisible();
+    await expect(page.getByTestId("suggestion").filter({ hasText: s }).first()).toBeVisible();
   }
 
   await expect(page.getByText("Source on every answer")).toBeVisible();

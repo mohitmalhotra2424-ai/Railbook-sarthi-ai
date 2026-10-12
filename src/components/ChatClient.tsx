@@ -13,7 +13,16 @@ import { TrainResultCards, type TrainCard } from "./TrainResultCards";
 import { PassengerFormPanel, type PassengerFormState } from "./PassengerFormPanel";
 import { ResultBlocks } from "./ResultBlocks";
 import type { ResultBlock } from "@/assistant/orchestrator";
-import { BrandMark, ArrowDownIcon, CheckIcon, MicIcon, PlusIcon, SendIcon, SpeakerIcon, StopIcon, WarnIcon } from "./icons";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  BrandMark,
+  MicIcon,
+  PlusIcon,
+  SpeakerIcon,
+  StopIcon,
+  WarnIcon,
+} from "./icons";
 import Link from "next/link";
 import { useVoiceInput } from "./voice/useVoiceInput";
 import { useSpeak } from "./voice/useSpeak";
@@ -85,7 +94,7 @@ function ToolChipView({ chip }: { chip: ToolChip }) {
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${chipStyle(chip)}`}
     >
       {chip.phase === "running" ? (
-        <span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-navy-400" />
+        <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-navy-400" />
       ) : chip.status === "ok" ? (
         <span aria-hidden className="font-bold">✓</span>
       ) : (
@@ -99,6 +108,63 @@ function ToolChipView({ chip }: { chip: ToolChip }) {
       )}
       {chip.freshness === "stale" && <span className="font-semibold">(stale)</span>}
     </span>
+  );
+}
+
+/** Compact desktop-only journey context (read-only summary of authoritative
+ *  session state already held by the client — no new data, no controls). */
+function JourneyContext({ form }: { form: PassengerFormState }) {
+  const sel = form.selection;
+  if (!sel?.classCode) return null;
+  const complete = form.passengers.filter((p) => p.name && p.age !== undefined && p.gender && p.berth).length;
+  const status =
+    form.review?.status === "confirmed"
+      ? "IRCTC handoff ready"
+      : form.review
+        ? "Awaiting confirmation"
+        : form.readiness?.ready
+          ? "Ready for review"
+          : "Collecting details";
+  return (
+    <div className="space-y-4">
+      <p className="text-[10.5px] font-bold tracking-[0.14em] text-navy-500 uppercase">Journey context</p>
+      <div className="space-y-3.5">
+        <div>
+          <p className="text-[10.5px] font-semibold text-navy-500">Journey</p>
+          <p className="mt-0.5 text-[13px] font-bold text-navy-950">
+            {sel.from && sel.to ? `${sel.from} → ${sel.to}` : "Route not set"}
+          </p>
+          <p className="text-[11.5px] text-navy-600">{sel.journeyDate ?? "Date not set"}</p>
+        </div>
+        <div>
+          <p className="text-[10.5px] font-semibold text-navy-500">Train</p>
+          <p className="mt-0.5 text-[13px] font-bold text-navy-950">
+            {sel.trainNumber}
+            {sel.trainName ? ` — ${sel.trainName}` : ""}
+          </p>
+          <p className="text-[11.5px] text-navy-600">Class {sel.classCode}</p>
+        </div>
+        <div>
+          <p className="text-[10.5px] font-semibold text-navy-500">Passengers</p>
+          <p className="mt-0.5 text-[13px] font-bold text-navy-950">
+            {complete} of {Math.max(form.passengers.length, 1)} complete
+          </p>
+          {form.passengers
+            .filter((p) => p.name)
+            .map((p, i) => (
+              <p key={i} className="text-[11.5px] text-navy-600">
+                {p.name}
+                {p.age !== undefined && p.gender ? ` · ${p.age} · ${p.gender}` : ""}
+              </p>
+            ))}
+        </div>
+        <div>
+          <p className="text-[10.5px] font-semibold text-navy-500">Status</p>
+          <p className="mt-0.5 text-[13px] font-bold text-navy-950">{status}</p>
+          <p className="text-[11px] text-navy-500">Booking execution disabled — review only.</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -450,307 +516,327 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   }
 
   const hasVoice = voice.supported || speak.supported;
+  const listening = voice.state === "recording" || voice.state === "processing";
+  const showContext = Boolean(paxForm?.selection?.classCode);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Chat header: brand bar with live status — fixed above the log */}
-      <div className="bg-navy-800 px-4 py-3 sm:px-6">
-        <div className="flex items-center justify-between gap-2">
+      {/* Conversation header — compact, light, status + new chat */}
+      <div className="border-b border-cream-300 bg-cream-50/85 px-4 py-2.5 backdrop-blur">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
             <Link
               href="/"
-              aria-label="Back to home"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition hover:bg-navy-900/80"
+              aria-label="RailSaarthi AI — home"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-navy-900 text-white transition hover:bg-navy-800"
             >
-              <BrandMark className="h-5 w-5" />
+              <BrandMark className="h-4.5 w-4.5" />
             </Link>
-            <p className="truncate text-[15px] font-extrabold text-white">RailSaarthi AI</p>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[14px] font-bold text-navy-950">RailSaarthi</p>
+              <p
+                data-testid="ready-pill"
+                className="flex items-center gap-1.5 text-[11px] font-medium text-navy-500"
+              >
+                <span
+                  aria-hidden
+                  className={`h-1.5 w-1.5 rounded-full ${busy ? "animate-pulse bg-saffron-500" : "bg-signal-500"}`}
+                />
+                {busy ? "Thinking…" : "Online · Ready"}
+              </p>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span
-              data-testid="ready-pill"
-              className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-navy-800"
-            >
-              <span aria-hidden className={`h-2 w-2 rounded-full ${busy ? "animate-pulse bg-saffron-500" : "bg-signal-500"}`} />
-              {busy ? "Thinking…" : "Ready"}
-            </span>
-            <button
+          <button
             type="button"
             data-testid="new-chat"
             aria-label="Start a new conversation"
             onClick={() => (confirmReset ? (setConfirmReset(false), newConversation()) : armConfirm())}
             disabled={messages.length === 0}
-            className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition disabled:opacity-40 ${
+            className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition disabled:opacity-40 ${
               confirmReset
                 ? "border-alert-500/40 bg-alert-500/10 text-alert-500"
-                : "border-white/20 bg-white/10 text-white hover:border-white/40"
+                : "border-cream-300 bg-white text-navy-700 hover:border-navy-300 hover:text-navy-900"
             }`}
           >
             <PlusIcon className="h-3.5 w-3.5" />
             {confirmReset ? "Confirm new chat?" : "New chat"}
-            </button>
-          </div>
+          </button>
         </div>
       </div>
-      {/* Conversation surface */}
-      <div className="relative min-h-0 flex-1">
-        <div
-          ref={logRef}
-          data-testid="chat-log"
-          role="log"
-          aria-live="polite"
-          aria-label="Conversation"
-          onScroll={onLogScroll}
-          className="h-full space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
-        >
-          {messages.length === 0 && (
-            <div className="pt-2 pb-2 sm:pt-6">
-              <div className="rounded-2xl border border-cream-300 bg-navy-50 p-4">
-                <p className="text-sm font-bold text-navy-900">Namaste! 🙏</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-navy-700">
-                  Main RailSaarthi AI hoon, aapka Indian Railways ka AI assistant.
-                </p>
-                <p className="mt-2.5 text-[12px] font-semibold text-navy-800">Main aapki madad kar sakta hoon:</p>
-                <ul className="mt-1.5 space-y-1.5">
-                  {[
-                    "Train search aur timings",
-                    "Fare aur travel classes",
-                    "Seat availability",
-                    "Live train status",
-                    "PNR status",
-                  ].map((x) => (
-                    <li key={x} className="flex items-center gap-2 text-[12px] font-medium text-navy-800">
-                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-navy-600 text-white">
-                        <CheckIcon className="h-2.5 w-2.5" />
-                      </span>
-                      {x}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2.5 text-[12px] text-navy-600">
-                  Aap kuch bhi pooch sakte hain — Hindi, Hinglish ya English mein.
-                </p>
-              </div>
 
-              <p className="mt-4 mb-2 text-[12px] font-bold text-navy-800">Suggested Questions</p>
-              <div className="grid gap-2 min-[420px]:grid-cols-2">
-                {SUGGESTIONS.map((sg) => (
-                  <button
-                    key={sg}
-                    type="button"
-                    data-testid="suggestion"
-                    onClick={() => void send(sg)}
-                    className="flex items-center justify-between gap-2 rounded-full border border-cream-300 bg-white px-3.5 py-2 text-left text-[12px] font-medium text-navy-800 transition hover:border-navy-300 hover:bg-navy-50"
+      {/* Conversation surface (+ compact desktop context panel) */}
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
+          <div
+            ref={logRef}
+            data-testid="chat-log"
+            role="log"
+            aria-live="polite"
+            aria-label="Conversation"
+            onScroll={onLogScroll}
+            className="h-full overflow-y-auto px-4 py-5 sm:px-6"
+          >
+            <div className="mx-auto max-w-3xl space-y-5">
+              {messages.length === 0 && (
+                <div className="animate-rise mx-auto max-w-xl pt-6 pb-2 text-center sm:pt-10">
+                  <span
+                    aria-hidden
+                    className="mx-auto flex h-14 w-14 items-center justify-center rounded-[20px] bg-navy-900 text-white"
                   >
-                    <span className="min-w-0 truncate">{sg}</span>
-                    <span aria-hidden className="text-navy-400">›</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className="w-full max-w-[88%] sm:max-w-[75%]">
-                {m.role === "user" ? (
-                  <div
-                    data-testid="chat-message-user"
-                    className="ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-navy-600 px-4 py-2.5 text-[14px] leading-relaxed text-white"
-                  >
-                    {m.text}
-                    <p className="mt-1 text-right text-[9px] text-navy-200">
-                      {new Date(Number(m.id.slice(2)) || Date.now()).toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
+                    <BrandMark className="h-7 w-7" />
+                  </span>
+                  <h2 className="font-display mt-4 text-[24px] font-semibold tracking-tight text-navy-950">
+                    Where are you travelling today?
+                  </h2>
+                  <p className="mt-2 text-[13.5px] leading-relaxed text-navy-600">
+                    Main RailSaarthi hoon — trains, fares, seat availability, live status
+                    aur PNR. Hindi, Hinglish ya English mein poochhiye.
+                  </p>
+                  <p className="mt-5 text-[12px] text-navy-500">
+                    Try saying:{" "}
+                    <span className="font-semibold text-navy-800">“Amritsar se Delhi kal jaana hai”</span>
+                  </p>
+                  <div className="mt-4 grid gap-2 text-left min-[420px]:grid-cols-2">
+                    {SUGGESTIONS.map((sg) => (
+                      <button
+                        key={sg}
+                        type="button"
+                        data-testid="suggestion"
+                        onClick={() => void send(sg)}
+                        className="surface-shadow-soft rounded-2xl border border-cream-300 bg-white px-4 py-3 text-[13px] font-medium text-navy-800 transition hover:border-navy-300 hover:bg-navy-50 active:scale-[0.99]"
+                      >
+                        {sg}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <div data-testid="chat-message-assistant" className="space-y-2">
-                    {m.chips && m.chips.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {m.chips.map((c) => (
-                          <ToolChipView key={c.correlationId} chip={c} />
-                        ))}
-                      </div>
-                    )}
+                </div>
+              )}
 
-                    {m.thinking && (
-                      <div data-testid="chat-thinking" className="flex items-center gap-2 px-1 text-sm text-navy-500">
-                        <span className="flex gap-1" aria-hidden>
-                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-navy-400 [animation-delay:0ms]" />
-                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-navy-400 [animation-delay:150ms]" />
-                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-navy-400 [animation-delay:300ms]" />
+              {messages.map((m) => (
+                <div key={m.id} className={`animate-rise flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  {m.role === "user" ? (
+                    <div className="w-full max-w-[88%] sm:max-w-[72%]">
+                      <div
+                        data-testid="chat-message-user"
+                        className="ml-auto w-fit max-w-full rounded-2xl rounded-br-lg bg-cream-200 px-4 py-2.5 text-[14.5px] leading-relaxed text-navy-900"
+                      >
+                        {m.text}
+                        <p className="mt-1 text-right text-[9.5px] text-navy-500">
+                          {new Date(Number(m.id.slice(2)) || Date.now()).toLocaleTimeString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div data-testid="chat-message-assistant" className="w-full space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          aria-hidden
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-900 text-white"
+                        >
+                          <BrandMark className="h-3.5 w-3.5" />
                         </span>
-                        {(() => {
-                          const running = [...(m.chips ?? [])].reverse().find((c) => c.phase === "running");
-                          return running ? `${TOOL_LABELS[running.tool] ?? running.tool}…` : "soch raha hoon…";
-                        })()}
-                      </div>
-                    )}
-
-                    {m.text && (
-                      <div className="rounded-2xl rounded-bl-md border border-cream-300 bg-white p-4">
-                        <p className="text-[15px] leading-relaxed whitespace-pre-line text-navy-900">{m.text}</p>
-                        {m.cards && m.cards.length > 0 && (
-                          <TrainResultCards cards={m.cards} onAsk={(q) => void send(q)} busy={busy} selectedTrainNumber={paxForm?.selection?.trainNumber ?? null} />
+                        <p className="text-[12.5px] font-bold text-navy-800">RailSaarthi</p>
+                        {m.viaFallback && (
+                          <span className="rounded-full border border-saffron-500/40 bg-saffron-500/10 px-2 py-0.5 text-[9.5px] font-semibold text-saffron-600">
+                            via configured fallback
+                          </span>
                         )}
-                        {m.blocks && m.blocks.length > 0 && <ResultBlocks blocks={m.blocks} />}
-                        <div className="mt-3 flex items-center justify-between gap-2 border-t border-cream-200 pt-2.5">
-                          <p className="text-[10px] text-navy-400" data-testid="answer-provenance">
-                            {m.model ? `model: ${m.model}` : "model: —"}
-                            {m.viaFallback ? " · via configured fallback" : ""}
+                      </div>
+
+                      {m.chips && m.chips.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {m.chips.map((c) => (
+                            <ToolChipView key={c.correlationId} chip={c} />
+                          ))}
+                        </div>
+                      )}
+
+                      {m.thinking && (
+                        <div data-testid="chat-thinking" className="flex items-center gap-2 px-1 text-[13px] text-navy-500">
+                          <span className="flex gap-1" aria-hidden>
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-navy-400 [animation-delay:0ms]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-navy-400 [animation-delay:150ms]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-navy-400 [animation-delay:300ms]" />
+                          </span>
+                          {(() => {
+                            const running = [...(m.chips ?? [])].reverse().find((c) => c.phase === "running");
+                            return running ? `${TOOL_LABELS[running.tool] ?? running.tool}…` : "soch raha hoon…";
+                          })()}
+                        </div>
+                      )}
+
+                      {m.text && (
+                        <div className="surface-shadow-soft rounded-2xl rounded-tl-lg border border-cream-300 bg-white p-4 sm:p-5">
+                          <p className="text-[15px] leading-relaxed whitespace-pre-line text-navy-950">{m.text}</p>
+                          {m.cards && m.cards.length > 0 && (
+                            <TrainResultCards cards={m.cards} onAsk={(q) => void send(q)} busy={busy} selectedTrainNumber={paxForm?.selection?.trainNumber ?? null} />
+                          )}
+                          {m.blocks && m.blocks.length > 0 && <ResultBlocks blocks={m.blocks} />}
+                          <div className="mt-3.5 flex items-center justify-between gap-2 border-t border-cream-200 pt-3">
+                            <p className="text-[10px] text-navy-400" data-testid="answer-provenance">
+                              {m.model ? `model: ${m.model}` : "model: —"}
+                              {m.viaFallback ? " · via configured fallback" : ""}
+                            </p>
+                            {speak.supported && (
+                              <button
+                                type="button"
+                                data-testid="speak-button"
+                                aria-label={speak.speakingId === m.id ? "Stop speaking" : "Speak response"}
+                                onClick={() =>
+                                  speak.speakingId === m.id ? speak.stop() : speak.speak(m.id, speechSummary(m))
+                                }
+                                className="flex items-center gap-1.5 rounded-full border border-cream-300 bg-white px-3 py-1.5 text-[11.5px] font-semibold text-navy-700 transition hover:border-navy-400 hover:text-navy-900"
+                              >
+                                {speak.speakingId === m.id ? (
+                                  <>
+                                    <StopIcon className="h-3 w-3" /> Rok dein
+                                  </>
+                                ) : (
+                                  <>
+                                    <SpeakerIcon className="h-3.5 w-3.5" /> Suno
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                          {speak.error && <p className="mt-1.5 text-[11px] text-alert-500">{speak.error}</p>}
+                        </div>
+                      )}
+
+                      {m.error && (
+                        <div
+                          data-testid="chat-error"
+                          className="rounded-2xl rounded-tl-lg border border-cream-300 bg-white p-4 sm:p-5"
+                        >
+                          <p className="flex items-center gap-2 text-[14px] font-semibold text-navy-950">
+                            <WarnIcon className="h-4 w-4 text-saffron-500" />
+                            Something went wrong while checking the railway service.
                           </p>
-                          {speak.supported && (
+                          <p className="mt-1.5 text-[13px] leading-relaxed text-navy-700">{m.error.message}</p>
+                          <p className="mt-1 text-[10px] font-semibold tracking-wide text-navy-400">{m.error.code}</p>
+                          {m.error.retryable && lastUserMessageRef.current && (
                             <button
                               type="button"
-                              data-testid="speak-button"
-                              aria-label={speak.speakingId === m.id ? "Stop speaking" : "Speak response"}
-                              onClick={() =>
-                                speak.speakingId === m.id ? speak.stop() : speak.speak(m.id, speechSummary(m))
-                              }
-                              className="flex items-center gap-1.5 rounded-full border border-navy-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-navy-700 transition hover:border-navy-400"
+                              data-testid="retry-button"
+                              disabled={busy}
+                              onClick={() => void send(lastUserMessageRef.current ?? "")}
+                              className="mt-3 rounded-full bg-navy-900 px-4 py-2 text-[12px] font-bold text-white transition hover:bg-navy-800 disabled:opacity-50"
                             >
-                              {speak.speakingId === m.id ? (
-                                <>
-                                  <StopIcon className="h-3 w-3" /> Rok dein
-                                </>
-                              ) : (
-                                <>
-                                  <SpeakerIcon className="h-3.5 w-3.5" /> Suno
-                                </>
-                              )}
+                              Try again
                             </button>
                           )}
                         </div>
-                        {speak.error && <p className="mt-1 text-[11px] text-alert-500">{speak.error}</p>}
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
 
-                    {m.error && (
-                      <div
-                        data-testid="chat-error"
-                        className="rounded-2xl rounded-bl-md border border-alert-500/30 bg-alert-500/5 p-4"
-                      >
-                        <p className="flex items-center gap-1.5 text-sm font-semibold text-alert-500">
-                          <WarnIcon className="h-4 w-4" />
-                          {m.error.code}
-                        </p>
-                        <p className="mt-1 text-sm text-navy-800">{m.error.message}</p>
-                        {m.error.retryable && lastUserMessageRef.current && (
-                          <button
-                            type="button"
-                            data-testid="retry-button"
-                            disabled={busy}
-                            onClick={() => void send(lastUserMessageRef.current ?? "")}
-                            className="mt-2.5 rounded-full border border-navy-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-navy-800 transition hover:bg-navy-50"
-                          >
-                            Retry
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {paxForm && (
+                <div ref={paxPanelRef}>
+                  <PassengerFormPanel
+                    state={paxForm}
+                    conversationId={conversationIdRef.current}
+                    onState={setPaxForm}
+                  />
+                </div>
+              )}
             </div>
-          ))}
+          </div>
 
-          {paxForm && (
-            <div ref={paxPanelRef}>
-              <PassengerFormPanel
-                state={paxForm}
-                conversationId={conversationIdRef.current}
-                onState={setPaxForm}
-              />
+          {showJump && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
+              <button
+                type="button"
+                data-testid="jump-latest"
+                onClick={jumpToLatest}
+                className="surface-shadow pointer-events-auto flex items-center gap-1 rounded-full border border-cream-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-navy-700 transition hover:border-navy-400"
+              >
+                <ArrowDownIcon className="h-3.5 w-3.5" />
+                Latest
+              </button>
             </div>
           )}
         </div>
 
-        {showJump && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
-            <button
-              type="button"
-              data-testid="jump-latest"
-              onClick={jumpToLatest}
-              className="pointer-events-auto flex items-center gap-1 rounded-full border border-navy-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-navy-700 shadow-sm transition hover:border-navy-400"
-            >
-              <ArrowDownIcon className="h-3.5 w-3.5" />
-              Latest
-            </button>
-          </div>
+        {/* Desktop compact context panel — summary only, from real state */}
+        {showContext && paxForm && (
+          <aside className="hidden w-[272px] shrink-0 overflow-y-auto border-l border-cream-300 bg-cream-50 p-5 xl:block">
+            <JourneyContext form={paxForm} />
+          </aside>
         )}
       </div>
 
-      {/* Composer — anchored at the bottom, keyboard-aware */}
-      <div className="border-t border-cream-300 bg-cream-50">
-        {hasVoice && (
-          <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-1.5 px-4 pt-2 text-[10px]">
-            {voice.supported && (
-              <>
-                <button
-                  type="button"
-                  data-testid="voice-lang"
-                  aria-label="Voice input language"
-                  onClick={() => setVoiceLang((l) => (l === "hi-IN" ? "en-IN" : "hi-IN"))}
-                  className="rounded-full border border-cream-300 bg-white px-2 py-0.5 font-semibold text-navy-600 transition hover:border-navy-300"
-                >
-                  {voiceLang === "hi-IN" ? "हिंदी" : "EN"}
-                </button>
-                {speak.supported && (
+      {/* Composer — persistent, keyboard-aware, thumb-friendly */}
+      <div className="border-t border-cream-300 bg-cream-100/95 px-3 py-3 backdrop-blur sm:px-4 sm:py-4">
+        <div className="mx-auto max-w-3xl">
+          {hasVoice && (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[10.5px]">
+              {voice.supported && (
+                <>
                   <button
                     type="button"
-                    data-testid="conversation-mode"
-                    aria-pressed={conversationMode}
-                    onClick={() => setConversationMode((v) => !v)}
-                    className={`rounded-full border px-2 py-0.5 font-semibold transition ${
-                      conversationMode
-                        ? "border-signal-500/40 bg-signal-500/10 text-signal-700"
-                        : "border-cream-300 bg-white text-navy-600 hover:border-navy-300"
-                    }`}
+                    data-testid="voice-lang"
+                    aria-label="Voice input language"
+                    onClick={() => setVoiceLang((l) => (l === "hi-IN" ? "en-IN" : "hi-IN"))}
+                    className="rounded-full border border-cream-300 bg-white px-2.5 py-1 font-semibold text-navy-600 transition hover:border-navy-300"
                   >
-                    {conversationMode ? "● Conversation mode ON" : "Conversation mode"}
+                    {voiceLang === "hi-IN" ? "हिंदी" : "EN"}
                   </button>
-                )}
-              </>
-            )}
-            {(voice.state === "recording" || voice.state === "processing" || voice.message) && (
-              <p
-                data-testid="voice-status"
-                role="status"
-                className={`ml-auto font-medium ${
-                  voice.state === "denied" || voice.state === "error" ? "text-alert-500" : "text-navy-600"
-                }`}
-              >
-                {voice.state === "recording" && "Sun raha hoon… boliye (tap mic to cancel)"}
-                {voice.state === "processing" && "…samajh raha hoon"}
-                {voice.message}
-              </p>
-            )}
-          </div>
-        )}
-        <form onSubmit={onSubmit} className="p-3 sm:p-4">
-          <div className="mx-auto flex max-w-2xl items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-end rounded-full border border-cream-300 bg-white py-1 pr-1 pl-1 focus-within:border-navy-400">
+                  {speak.supported && (
+                    <button
+                      type="button"
+                      data-testid="conversation-mode"
+                      aria-pressed={conversationMode}
+                      onClick={() => setConversationMode((v) => !v)}
+                      className={`rounded-full border px-2.5 py-1 font-semibold transition ${
+                        conversationMode
+                          ? "border-signal-500/40 bg-signal-500/10 text-signal-700"
+                          : "border-cream-300 bg-white text-navy-600 hover:border-navy-300"
+                      }`}
+                    >
+                      {conversationMode ? "● Conversation mode ON" : "Conversation mode"}
+                    </button>
+                  )}
+                </>
+              )}
+              {(listening || voice.message) && (
+                <p
+                  data-testid="voice-status"
+                  role="status"
+                  className={`ml-auto flex items-center gap-1.5 font-medium ${
+                    voice.state === "denied" || voice.state === "error" ? "text-alert-500" : "text-navy-600"
+                  }`}
+                >
+                  {voice.state === "recording" && (
+                    <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-navy-700" />
+                  )}
+                  {voice.state === "recording" && "Sun raha hoon… boliye (tap mic to cancel)"}
+                  {voice.state === "processing" && "…samajh raha hoon"}
+                  {voice.message}
+                </p>
+              )}
+            </div>
+          )}
+          <form onSubmit={onSubmit}>
+            <div className="surface-shadow flex items-end gap-1.5 rounded-[22px] border border-cream-300 bg-white p-1.5 transition focus-within:border-navy-400 focus-within:ring-4 focus-within:ring-navy-500/10">
               {voice.supported && (
                 <button
                   type="button"
                   data-testid="mic-button"
-                  aria-label={
-                    voice.state === "recording" || voice.state === "processing"
-                      ? "Cancel voice input"
-                      : "Start voice input"
-                  }
+                  aria-label={listening ? "Cancel voice input" : "Start voice input"}
                   disabled={busy}
                   onClick={onMicTap}
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition disabled:opacity-40 ${
-                    voice.state === "recording" || voice.state === "processing"
-                      ? "animate-pulse bg-alert-500/10 text-alert-500"
-                      : "text-navy-500 hover:bg-navy-50 hover:text-navy-800"
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition disabled:opacity-40 ${
+                    listening
+                      ? "mic-live bg-navy-900 text-white"
+                      : "bg-navy-50 text-navy-700 hover:bg-navy-100 hover:text-navy-900"
                   }`}
                 >
-                  <MicIcon className="h-4.5 w-4.5" />
+                  <MicIcon className="h-5 w-5" />
                 </button>
               )}
               <textarea
@@ -765,21 +851,21 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                 }}
                 onKeyDown={onComposerKeyDown}
                 placeholder="Type your journey…"
-                className="max-h-28 min-w-0 flex-1 resize-none self-center bg-transparent px-2 py-2 text-sm leading-relaxed text-navy-900 placeholder:text-navy-400 focus:outline-none"
+                className="max-h-28 min-w-0 flex-1 resize-none self-center bg-transparent px-2 py-2.5 text-[15px] leading-relaxed text-navy-950 placeholder:text-navy-400 focus:outline-none"
               />
+              <button
+                type="submit"
+                disabled={busy || !input.trim()}
+                aria-busy={busy}
+                aria-label="Send"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-navy-600 text-white transition hover:bg-navy-500 active:scale-95 disabled:opacity-40"
+              >
+                <ArrowUpIcon className="h-5 w-5" />
+                <span className="sr-only">{busy ? "Sending…" : "Send"}</span>
+              </button>
             </div>
-            <button
-              type="submit"
-              disabled={busy || !input.trim()}
-              aria-busy={busy}
-              aria-label="Send"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-navy-600 text-white transition hover:bg-navy-500 active:scale-95 disabled:opacity-40"
-            >
-              <SendIcon className="h-4.5 w-4.5" />
-              <span className="sr-only">{busy ? "Sending…" : "Send"}</span>
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );

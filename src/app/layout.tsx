@@ -37,7 +37,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0a1f3f",
+  themeColor: "#f7f4ee",
   // Mobile keyboards resize the visual viewport so the composer stays
   // reachable instead of being covered (keyboard-aware behaviour).
   interactiveWidget: "resizes-content",
@@ -62,34 +62,35 @@ export default function RootLayout({
           >
             Skip to content
           </a>
-          <header className="sticky top-0 z-40 bg-navy-950">
-            <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-4">
+          {/* Compact light app bar — brand left, navigation right. */}
+          <header className="sticky top-0 z-40 border-b border-cream-300 bg-cream-50/90 backdrop-blur">
+            <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4">
               <Link
                 href="/"
                 aria-label="RailSaarthi AI — home"
-                className="flex min-w-0 items-center gap-2.5 rounded-lg"
+                className="flex min-w-0 items-center gap-2.5 rounded-xl"
               >
                 <span
                   aria-hidden
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-navy-700"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-navy-900 text-white"
                 >
-                  <BrandMark className="h-5.5 w-5.5" />
+                  <BrandMark className="h-5 w-5" />
                 </span>
                 <span className="min-w-0 leading-tight">
-                  <span className="font-display block truncate text-[15px] font-semibold tracking-tight text-white">
-                    RailSaarthi AI
+                  <span className="font-display block truncate text-[15px] font-semibold tracking-tight text-navy-950">
+                    RailSaarthi
                   </span>
-                  <span className="hidden truncate text-[10px] font-medium text-navy-200 min-[400px]:block">
-                    रेलसारथी · your AI railway assistant
+                  <span className="hidden truncate text-[10.5px] font-medium text-navy-500 min-[400px]:block">
+                    AI Railway Assistant · रेलसारथी
                   </span>
                 </span>
               </Link>
-              <nav aria-label="Main" className="flex shrink-0 items-center gap-0.5 text-sm">
+              <nav aria-label="Main" className="flex shrink-0 items-center gap-0.5 text-[13px]">
                 {NAV.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`rounded-full px-3 py-2 font-medium text-navy-100 transition hover:bg-navy-800 hover:text-white ${
+                    className={`rounded-full px-3 py-2 font-medium text-navy-700 transition hover:bg-cream-200 hover:text-navy-900 ${
                       item.mobile ? "" : "hidden sm:block"
                     }`}
                   >
@@ -105,7 +106,7 @@ export default function RootLayout({
           </main>
 
           <footer className="border-t border-cream-300 bg-cream-50">
-            <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 py-5 text-xs text-navy-600 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-5 text-xs text-navy-600 sm:flex-row sm:items-center sm:justify-between">
               <p>
                 <span className="font-semibold text-navy-800">सच्चाई पहले · Honesty first.</span>{" "}
                 Results appear only from authorized providers, labelled with source and
@@ -115,7 +116,7 @@ export default function RootLayout({
                 <Link href="/trains" className="font-medium text-navy-700 underline-offset-2 hover:underline">
                   Trains
                 </Link>
-                <span aria-hidden className="mx-1.5 text-navy-300">·</span>
+                <span aria-hidden className="mx-1.5 text-navy-400">·</span>
                 <Link href="/disruptions" className="font-medium text-navy-700 underline-offset-2 hover:underline">
                   Disruptions
                 </Link>

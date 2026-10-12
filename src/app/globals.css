@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 /*
- * RailSaarthi AI design tokens — premium navy & off-white.
+ * RailSaarthi AI design tokens — premium navy & warm ivory.
  * Tailwind v4 @theme generates utilities (bg-navy-900, text-cream-100, …).
+ * UI/UX rebuild: warm off-white surfaces, deep navy primary, soft borders,
+ * large radii, minimal shadows, generous whitespace.
  */
 @theme {
   /* Deep railway navy — brand surfaces + primary actions */
@@ -18,12 +20,12 @@
   --color-navy-900: #102653;
   --color-navy-950: #0a1f3f;
 
-  /* White + very light blue-grey surfaces */
+  /* Warm ivory / off-white surfaces (white cards float on top) */
   --color-cream-50: #ffffff;
-  --color-cream-100: #f4f7fb;
-  --color-cream-200: #e8eef6;
-  --color-cream-300: #d7e2ee;
-  --color-cream-400: #b9cddf;
+  --color-cream-100: #f7f4ee;
+  --color-cream-200: #efe9de;
+  --color-cream-300: #e3dbcc;
+  --color-cream-400: #cec2ab;
 
   /* Restrained saffron accent */
   --color-saffron-400: #fb923c;
@@ -57,7 +59,14 @@ html {
 
 /* The single elevation used for floating surfaces (composer, cards). */
 .surface-shadow {
-  box-shadow: 0 1px 2px rgb(8 18 38 / 0.06), 0 8px 24px -12px rgb(8 18 38 / 0.18);
+  box-shadow:
+    0 1px 2px rgb(16 38 83 / 0.05),
+    0 10px 30px -14px rgb(16 38 83 / 0.16);
+}
+
+/* Softer elevation for inline content cards (messages, results). */
+.surface-shadow-soft {
+  box-shadow: 0 1px 2px rgb(16 38 83 / 0.05);
 }
 
 body {
@@ -69,25 +78,40 @@ body {
   color: #ffffff;
 }
 
-/* Accessibility: honour reduced-motion preferences (Prompt 8 §7). */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  ::before,
-  ::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+/* Calm entrance for messages/cards — short, subtle, never distracting. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-/* Accessible keyboard focus everywhere */
-:focus-visible {
-  outline: 2px solid var(--color-saffron-500);
-  outline-offset: 2px;
+.animate-rise {
+  animation: rise-in 0.28s ease-out both;
 }
 
-/* Reduced motion support */
+/* Microphone live ring — only rendered while actually recording. */
+@keyframes mic-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(16 38 83 / 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgb(16 38 83 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(16 38 83 / 0);
+  }
+}
+
+.mic-live {
+  animation: mic-ring 1.6s ease-out infinite;
+}
+
+/* Accessibility: honour reduced-motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

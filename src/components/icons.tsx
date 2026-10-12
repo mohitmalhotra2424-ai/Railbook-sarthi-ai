@@ -184,3 +184,12 @@ export function ChevronDownIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function ArrowUpIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" {...base} className={className}>
+      <path d="M12 19V5" />
+      <path d="M5 12l7-7 7 7" />
+    </svg>
+  );
+}

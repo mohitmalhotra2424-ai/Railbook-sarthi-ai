@@ -13,7 +13,7 @@ function fmtWhen(iso?: string): string {
 /** Provenance footer — source + last updated, only when actually provided. */
 function Meta({ block }: { block: ResultBlock }) {
   return (
-    <p className="flex flex-wrap gap-x-3 gap-y-0.5 border-t border-cream-200 bg-cream-100 px-3.5 py-2 text-[10px] font-medium text-navy-500">
+    <p className="flex flex-wrap gap-x-3 gap-y-0.5 border-t border-cream-200 bg-cream-100/70 px-4 py-2 text-[10px] font-medium text-navy-500">
       {block.source ? <span>Source: {block.source}</span> : null}
       {block.freshness ? <span>· {block.freshness}</span> : null}
       {block.retrievedAt ? <span>· Last updated: {fmtWhen(block.retrievedAt)}</span> : null}
@@ -40,8 +40,8 @@ function Dot({ kind }: { kind: ReturnType<typeof availabilityKind> }) {
 
 function Frame({ title, block, children }: { title: string; block: ResultBlock; children: React.ReactNode }) {
   return (
-    <div className="mt-2.5 overflow-hidden rounded-2xl border border-cream-300 bg-white shadow-sm">
-      <p className="border-b border-cream-200 px-3.5 py-2 text-[10px] font-bold tracking-wide text-navy-500 uppercase">
+    <div className="surface-shadow-soft mt-3 overflow-hidden rounded-2xl border border-cream-300 bg-white">
+      <p className="border-b border-cream-200 bg-cream-100/70 px-4 py-2.5 text-[10.5px] font-bold tracking-[0.12em] text-navy-500 uppercase">
         {title}
       </p>
       {children}
@@ -60,7 +60,7 @@ export function ResultBlocks({ blocks }: { blocks: ResultBlock[] }) {
             const d = b.data;
             return (
               <Frame key={i} title="Seat Availability" block={b}>
-                <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+                <div className="flex items-center gap-2.5 px-4 py-3">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-navy-50 text-navy-700">
                     <BrandMark className="h-4.5 w-4.5" />
                   </span>
@@ -71,18 +71,18 @@ export function ResultBlocks({ blocks }: { blocks: ResultBlock[] }) {
                     <p>{d.date}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-[3.5rem_1fr_auto] gap-2 border-t border-cream-200 px-3.5 py-1.5 text-[10px] font-bold tracking-wide text-navy-400 uppercase">
+                <div className="grid grid-cols-[3.5rem_1fr_auto] gap-2 border-t border-cream-200 px-4 py-1.5 text-[10px] font-bold tracking-wide text-navy-400 uppercase">
                   <span>Class</span>
                   <span>Availability</span>
                   <span>Status</span>
                 </div>
-                <ul className="px-3.5 pb-3">
+                <ul className="px-4 pb-3">
                   {d.classes.map((c) => {
                     const kind = availabilityKind(c.status);
                     return (
                       <li
                         key={c.classCode}
-                        className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-2 border-t border-cream-200 py-1.5 text-[12px]"
+                        className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-2 border-t border-cream-200 py-2 text-[12.5px]"
                       >
                         <span className="font-bold text-navy-900">{c.classCode}</span>
                         <span className="min-w-0 truncate font-medium text-navy-700">{c.status}</span>
@@ -101,23 +101,23 @@ export function ResultBlocks({ blocks }: { blocks: ResultBlock[] }) {
             const d = b.data;
             return (
               <Frame key={i} title="Fare Information" block={b}>
-                <div className="px-3.5 py-2.5 text-[11px] leading-snug text-navy-600">
+                <div className="px-4 py-3 text-[11.5px] leading-snug text-navy-600">
                   <p className="font-bold text-navy-900">
                     {d.trainNumber} · {d.from.name} ({d.from.code}) → {d.to.name} ({d.to.code})
                   </p>
                 </div>
-                <div className="grid grid-cols-[3.5rem_1fr] gap-2 border-t border-cream-200 px-3.5 py-1.5 text-[10px] font-bold tracking-wide text-navy-400 uppercase">
+                <div className="grid grid-cols-[3.5rem_1fr] gap-2 border-t border-cream-200 px-4 py-1.5 text-[10px] font-bold tracking-wide text-navy-400 uppercase">
                   <span>Class</span>
                   <span className="text-right">Fare (₹)</span>
                 </div>
-                <ul className="px-3.5 pb-2">
-                  <li className="grid grid-cols-[3.5rem_1fr] items-center gap-2 border-t border-cream-200 py-1.5 text-[12px]">
+                <ul className="px-4 pb-2">
+                  <li className="grid grid-cols-[3.5rem_1fr] items-center gap-2 border-t border-cream-200 py-2 text-[12.5px]">
                     <span className="font-bold text-navy-900">{d.classCode}</span>
                     <span className="text-right font-bold text-navy-900 tabular-nums">{inr(d.totalFare)}</span>
                   </li>
                 </ul>
                 {d.breakup && d.breakup.length > 0 && (
-                  <ul className="space-y-0.5 border-t border-cream-200 px-3.5 py-2 text-[10px] text-navy-500">
+                  <ul className="space-y-0.5 border-t border-cream-200 px-4 py-2 text-[10px] text-navy-500">
                     {d.breakup.map((x) => (
                       <li key={x.component} className="flex justify-between gap-3">
                         <span>{x.component}</span>
@@ -133,7 +133,7 @@ export function ResultBlocks({ blocks }: { blocks: ResultBlock[] }) {
             const d = b.data;
             return (
               <Frame key={i} title="Live Train Status" block={b}>
-                <div className="flex items-center justify-between gap-2 px-3.5 py-2.5">
+                <div className="flex items-center justify-between gap-2 px-4 py-3">
                   <p className="min-w-0 truncate text-[12px] font-bold text-navy-900">
                     {d.trainNumber} · {d.trainName}
                   </p>
@@ -149,7 +149,7 @@ export function ResultBlocks({ blocks }: { blocks: ResultBlock[] }) {
                     {d.running === null ? "Not reported" : d.running ? "Running" : "Not running"}
                   </span>
                 </div>
-                <ul className="space-y-1 border-t border-cream-200 px-3.5 py-2.5 text-[11px] text-navy-800">
+                <ul className="space-y-1.5 border-t border-cream-200 px-4 py-3 text-[11.5px] text-navy-800">
                   <li className="flex justify-between gap-3">
                     <span className="text-navy-500">Current / last location</span>
                     <span className="text-right font-semibold">
@@ -180,7 +180,7 @@ export function ResultBlocks({ blocks }: { blocks: ResultBlock[] }) {
             const d = b.data;
             return (
               <Frame key={i} title="PNR Status" block={b}>
-                <div className="px-3.5 py-2.5 text-[11px] leading-snug text-navy-600">
+                <div className="px-4 py-3 text-[11.5px] leading-snug text-navy-600">
                   <p className="font-bold text-navy-900">
                     {d.pnr}
                     {d.trainName ? ` · ${d.trainName}` : ""}
@@ -190,7 +190,7 @@ export function ResultBlocks({ blocks }: { blocks: ResultBlock[] }) {
                     Journey: {d.journeyDate ?? "not reported"} · Chart prepared: {d.chartPrepared ? "Yes" : "No"}
                   </p>
                 </div>
-                <ul className="px-3.5 pb-3">
+                <ul className="px-4 pb-3">
                   {d.passengers.map((p) => {
                     const kind = availabilityKind(p.currentStatus);
                     return (
