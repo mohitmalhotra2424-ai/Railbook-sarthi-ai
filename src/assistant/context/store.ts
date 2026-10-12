@@ -31,7 +31,10 @@ export interface ResultRef {
   route?: { from?: string; to?: string };
   classCode?: string;
   trainNumber?: string;
-  /** Compact rows so the LLM can resolve "doosri wali"-style references. */
+  /** Authoritative rows (bounded by MAX_SELECTION_ITEMS) — SELECT_TRAIN
+   *  validates against this FULL set; the LLM's rendered context shows only
+   *  the first MAX_CONTEXT_ITEMS so it can resolve "doosri wali"-style
+   *  references without bloating the prompt. */
   items?: { index: number; label: string; classes?: string[] }[];
   summary?: string;
   /** Prompt 33: provider-returned fare (only when a GET_FARE result was ok). */
@@ -106,6 +109,11 @@ export interface Conversation {
 const MAX_CONVERSATIONS = 200;
 const MAX_MESSAGES = 16; // ~8 turns of text; structured context carries the rest
 const MAX_RESULT_REFS = 8;
+/** Full authoritative rows kept for selection validation (bounded only as a
+ *  defense against abuse payloads — real provider lists are far smaller). */
+const MAX_SELECTION_ITEMS = 150;
+/** Conversational rendering shows only the first N items (compact context). */
+const MAX_CONTEXT_ITEMS = 8;
 const TTL_MS = 2 * 60 * 60 * 1000;
 
 export class ConversationStore {
@@ -276,8 +284,12 @@ export class ConversationStore {
         ]
           .filter(Boolean)
           .join(" ");
-        const items = r.items?.length
-          ? `\n     items: ${r.items.map((i) => `${i.index}) ${i.label}`).join("; ")}`
+        const shown = (r.items ?? []).slice(0, MAX_CONTEXT_ITEMS);
+        const extra = (r.items?.length ?? 0) - shown.length;
+        const items = shown.length
+          ? `\n     items: ${shown.map((i) => `${i.index}) ${i.label}`).join("; ")}${
+              extra > 0 ? ` (+${extra} more in current results — selectable, not listed)` : ""
+            }`
           : "";
         return `  ${parts}${items}`;
       })
@@ -453,7 +465,7 @@ export class ConversationStore {
 
 function compactItems(data: unknown): { index: number; label: string }[] | undefined {
   if (!Array.isArray(data)) return undefined;
-  return data.slice(0, 8).map((row, i) => {
+  return data.slice(0, MAX_SELECTION_ITEMS).map((row, i) => {
     const r = row as Record<string, unknown>;
     const label =
       [r.trainNumber, r.trainName, r.departure && `dep ${String(r.departure)}`, r.arrival && `arr ${String(r.arrival)}`]

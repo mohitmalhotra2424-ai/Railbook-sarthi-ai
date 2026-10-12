@@ -255,7 +255,7 @@ it("L7: oversized provider response is compacted — context payload stays bound
   const conv = store.getOrCreate("big-conv");
   const refs = conv.results;
   expect(refs.length).toBeLessThanOrEqual(8); // MAX_RESULT_REFS
-  for (const r of refs) expect(r.items?.length ?? 0).toBeLessThanOrEqual(8); // compactItems cap
+  for (const r of refs) expect(r.items?.length ?? 0).toBeLessThanOrEqual(150); // selection-set bound (MAX_SELECTION_ITEMS); conversational rendering is capped at 8
 });
 
 it("L8: primary AND fallback both failing — honest error, no fabricated railway reply", async () => {
