@@ -1,7 +1,7 @@
 import { badRequest, jsonResponse } from "@/lib/http";
 import { conversationStore } from "@/assistant/context/store";
 import { evaluateReadiness, IRCTC_HANDOFF_READY, parseTimesFromLabel } from "@/assistant/booking/preparation";
-import { validatePassengerField } from "@/assistant/passengers/validate";
+import { validatePassengerField, validateCategory } from "@/assistant/passengers/validate";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +69,7 @@ export async function POST(request: Request): Promise<Response> {
     field?: unknown;
     value?: unknown;
     action?: unknown;
+    category?: unknown;
   } | null;
 
   const conversationId = typeof body?.conversationId === "string" ? body.conversationId : "";
@@ -104,7 +105,13 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (body?.action === "add") {
-    const res = conversationStore.addPassenger(conversationId);
+    if (body.category !== undefined && !validateCategory(body.category).ok) return badRequest("Invalid passenger category.");
+    const res = conversationStore.addPassenger(
+      conversationId,
+      body?.category === "infant_with_berth" || body?.category === "infant_without_berth" || body?.category === "passenger"
+        ? body.category
+        : undefined,
+    );
     if (!res.ok) return jsonResponse({ ok: false, error: res.error }, { status: 400 });
     const conv = conversationStore.get(conversationId);
     return jsonResponse({ ok: true, selection: conv?.selection ?? null, passengers: res.passengers, review: conv?.review ?? null, readiness: conv ? evaluateReadiness(conv) : null });

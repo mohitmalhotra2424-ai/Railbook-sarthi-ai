@@ -57,11 +57,11 @@ const FIELD_PATTERNS: { field: ClaimField; re: RegExp }[] = [
 
 /** Any "save/update/confirm/record/store" verb, English or Hindi/Hinglish. */
 const SAVE_VERB =
-  /(save|saved|सेव|सहेज|update|updated|अपडेट|confirm|confirmed|कन्फर्म|कन्फ़र्म|confirm|record|recorded|दर्ज|store|stored)/i;
+  /(save|saved|सेव|सहेज|update|updated|अपडेट|confirm|confirmed|कन्फर्म|कन्फ़र्म|record|recorded|दर्ज|store|stored|noted?|note\s+kar\s+(li|le)|नोट|लिख\s*ली|likh\s+li)/i;
 
 /** Completion markers that turn the verb into a "it IS saved" claim. */
 const COMPLETION =
-  /(ho\s*(gaya|gayi|gaye|chuka|chuki|chuke|liya|li|gae|gayee)|हो\s*(गया|गई|गये|चुका|चुकी|लिया)|की\s*(गई|गया)|ली\s*(गई)|गई\s*है|गया\s*है|\bis\s+(saved|updated|confirmed|recorded|stored)\b|\bhas\s+been\b|\bsaved\b|\bupdated\b|\bconfirmed\b|\brecorded\b|\bstored\b)/i;
+  /(ho\s*(gaya|gayi|gaye|chuka|chuki|chuke|liya|li|gae|gayee)|हो\s*(गया|गई|गये|चुका|चुकी|लिया)|की\s*(गई|गया)|ली\s*(गई)|गई\s*है|गया\s*है|\bis\s+(saved|updated|confirmed|recorded|stored)\b|\bhas\s+been\b|\bsaved\b|\bupdated\b|\bconfirmed\b|\brecorded\b|\bstored\b|\bnoted\b|kar\s*(liya|li|lee)\b|liya\s*(gaya|gayi|hai|gaye)\b|li\s*(gaya|gayi)\b)/i;
 
 const DEVANAGARI = /[\u0900-\u097f]/;
 

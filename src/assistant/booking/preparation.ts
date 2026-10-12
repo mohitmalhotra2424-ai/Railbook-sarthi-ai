@@ -13,7 +13,7 @@
  */
 
 import {
-  REQUIRED_PASSENGER_FIELDS,
+  requiredFieldsFor,
   type Conversation,
 } from "@/assistant/context/store";
 
@@ -28,12 +28,15 @@ export type BlockerCode =
   | "NO_PASSENGERS"
   | "PASSENGER_INCOMPLETE"
   | "STALE_AVAILABILITY"
-  | "STALE_FARE";
+  | "STALE_FARE"
+  | "INFANT_AGE_INVALID";
 
 export type WarningCode =
   | "AVAILABILITY_NOT_VERIFIED"
   | "FARE_NOT_VERIFIED"
-  | "BERTH_IS_REQUEST_ONLY";
+  | "BERTH_IS_REQUEST_ONLY"
+  | "CHILD_UNDER_5_RULE"
+  | "CHILD_5_11_FARE_RULE";
 
 export interface ReadinessIssue {
   code: BlockerCode | WarningCode | string;
@@ -99,8 +102,9 @@ export function evaluateReadiness(conv: ReadinessInput): ReadinessResult {
     blockers.push({ code: "NO_PASSENGERS", detail: "No passenger details collected yet." });
   }
   conv.passengers.forEach((p, i) => {
-    const missing = REQUIRED_PASSENGER_FIELDS.filter((f) => p[f] === undefined);
-    for (const f of missing) missingFields.push(`passenger ${i + 1}: ${f}`);
+    const required = requiredFieldsFor(p);
+    const missing = required.filter((f) => p[f] === undefined);
+    for (const f of missing) missingFields.push(`passenger ${i + 1}: ${String(f)}`);
     if (missing.length) {
       blockers.push({
         code: "PASSENGER_INCOMPLETE",
@@ -111,6 +115,26 @@ export function evaluateReadiness(conv: ReadinessInput): ReadinessResult {
       warnings.push({
         code: "BERTH_IS_REQUEST_ONLY",
         detail: `Passenger ${i + 1} berth "${p.berth}" is a request only — no authorised provider verifies it.`,
+      });
+    }
+    // Prompt 45 — IRCTC children rule (fetched from the official fare policy):
+    // infants are UNDER 5; under 5 without berth = free, no ticket, no berth.
+    if ((p.category === "infant_without_berth" || p.category === "infant_with_berth") && p.age !== undefined && p.age >= 5) {
+      blockers.push({
+        code: "INFANT_AGE_INVALID",
+        detail: `Passenger ${i + 1}: infant entries are for children under 5 years — age ${p.age} must be booked as a normal passenger.`,
+      });
+    }
+    if (p.age !== undefined && p.age < 5 && (!p.category || p.category === "passenger")) {
+      warnings.push({
+        code: "CHILD_UNDER_5_RULE",
+        detail: `Passenger ${i + 1}: under-5 children travel FREE with no ticket when no separate berth is requested; with a berth the full adult fare applies. Add them as an infant instead.`,
+      });
+    }
+    if (p.age !== undefined && p.age >= 5 && p.age < 12 && (!p.category || p.category === "passenger")) {
+      warnings.push({
+        code: "CHILD_5_11_FARE_RULE",
+        detail: `Passenger ${i + 1}: children 5–11 in reserved travel: half adult fare without a separate berth, subject to minimum charging distance; full adult fare with a separate berth. Policy only — exact fare must be provider-verified.`,
       });
     }
   });

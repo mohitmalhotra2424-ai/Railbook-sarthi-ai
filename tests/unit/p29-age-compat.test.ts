@@ -155,7 +155,7 @@ it("B: string age \"28\" continues to work unchanged", async () => {
 /* ===== C — invalid numeric and string ages rejected ===== */
 
 it("C: out-of-range numeric and malformed string ages are rejected; form unchanged", async () => {
-  for (const bad of [280, 0, -5, "280", "abc", ""]) {
+  for (const bad of [280, -5, "280", "abc", "", "2years", "2.5"]) {
     const store = new ConversationStore();
     await setupUntilNameSaved(store, `a29-c-${String(bad)}`);
     const ev = await drain(

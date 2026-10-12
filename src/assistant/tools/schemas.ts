@@ -182,7 +182,7 @@ export const SelectClassArgs = z.object({
 export const UpdatePassengerArgs = z
   .object({
     passenger: z.number().int().min(1).max(6).optional().describe("1-based passenger index (default 1)."),
-    field: z.enum(["name", "age", "gender", "berth"]).describe("The passenger field to validate and record."),
+    field: z.enum(["name", "age", "gender", "berth", "category", "nationality"]).describe("The passenger field to validate and record."),
     value: z
       .union([z.string().min(1), z.number().int()], {
         message: "The user's answer for that field, verbatim.",

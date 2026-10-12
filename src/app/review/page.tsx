@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  REQUIRED_PASSENGER_FIELDS,
+  requiredFieldsFor,
   type PassengerDraft,
   type ReviewState,
   type SelectionState,
@@ -98,8 +98,8 @@ export default function ReviewPage() {
       <header className="border-b border-cream-300 bg-cream-50/90 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
           <Link
-            href="/chat"
-            aria-label="Chat par jaayein"
+            href={conversationId ? `/passengers?c=${encodeURIComponent(conversationId)}` : "/chat"}
+            aria-label="Passenger details par jaayein"
             className="flex h-9 w-9 items-center justify-center rounded-2xl bg-navy-900 text-white transition hover:bg-navy-800"
           >
             <BrandMark className="h-4.5 w-4.5" />
@@ -211,7 +211,7 @@ export default function ReviewPage() {
               </p>
               <ul className="divide-y divide-cream-200">
                 {(snap.passengers.length ? snap.passengers : [{}]).map((p, i) => {
-                  const missing = REQUIRED_PASSENGER_FIELDS.filter((f) => p[f] === undefined);
+                  const missing = requiredFieldsFor(p).filter((f) => p[f] === undefined);
                   return (
                     <li key={i} className="flex items-center gap-3 px-5 py-3 text-[12.5px]" data-testid={`review-page-pax-${i + 1}`}>
                       <span
@@ -227,7 +227,8 @@ export default function ReviewPage() {
                             {p.name}
                           </span>
                           <span className="mt-0.5 block text-[11px] text-navy-600">
-                            {p.age} yrs · {p.gender} · berth: {p.berth}
+                            {p.age} yrs · {p.gender} · {p.category === "infant_without_berth" ? "Under 5, no separate berth — free travel rule" : `berth: ${p.berth}`}
+                            {p.category === "infant_with_berth" && " · Under 5 with berth: full adult fare rule"}
                           </span>
                         </span>
                       ) : (
@@ -245,7 +246,7 @@ export default function ReviewPage() {
             {!ready && snap.readiness && (
               <p className="rounded-2xl border border-saffron-500/40 bg-saffron-500/10 px-4 py-3 text-[11.5px] font-semibold text-saffron-600" data-testid="review-missing">
                 Review complete nahi ho sakti — {snap.readiness.missingFields.length ? `missing: ${snap.readiness.missingFields.join(", ")}` : snap.readiness.blockers.map((b) => b.code).join(", ")} ·{" "}
-                <Link href="/chat" className="underline">chat mein bharein</Link>
+                <Link href={conversationId ? `/passengers?c=${encodeURIComponent(conversationId)}` : "/chat"} className="underline">passenger details mein bharein</Link>
               </p>
             )}
 

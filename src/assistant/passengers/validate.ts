@@ -20,9 +20,9 @@ export function validateName(raw: unknown): FieldCheck<string> {
 }
 
 export function validateAge(raw: unknown): FieldCheck<number> {
-  const n = typeof raw === "number" ? raw : Number.parseInt(String(raw).trim(), 10);
-  if (!Number.isInteger(n) || n < 1 || n > 120) {
-    return { ok: false, error: "Age must be a whole number between 1 and 120." };
+  const n = typeof raw === "number" ? raw : (typeof raw === "string" && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN);
+  if (!Number.isInteger(n) || n < 0 || n > 120) {
+    return { ok: false, error: "Age must be a whole number between 0 and 120." };
   }
   return { ok: true, value: n };
 }
@@ -45,6 +45,27 @@ export function validateGender(raw: unknown): FieldCheck<"male" | "female" | "ot
 export function validateBerth(raw: unknown): FieldCheck<string> {
   const v = String(raw ?? "").trim();
   if (!v || v.length > 40) return { ok: false, error: "Berth preference not understood." };
+  return { ok: true, value: v };
+}
+
+const CATEGORIES: Record<string, "passenger" | "infant_with_berth" | "infant_without_berth"> = {
+  passenger: "passenger",
+  infant_with_berth: "infant_with_berth",
+  infant_without_berth: "infant_without_berth",
+};
+/** Prompt 45 — IRCTC-style passenger category (adult / infant with or without berth). */
+export function validateCategory(raw: unknown): FieldCheck<"passenger" | "infant_with_berth" | "infant_without_berth"> {
+  const key = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  const c = Object.hasOwn(CATEGORIES, key) ? CATEGORIES[key] : undefined;
+  if (!c) return { ok: false, error: "Category must be passenger, infant_with_berth or infant_without_berth." };
+  return { ok: true, value: c };
+}
+
+/** IRCTC-style nationality select; free text accepted, stored as given. */
+export function validateNationality(raw: unknown): FieldCheck<string> {
+  if (typeof raw !== "string") return { ok: false, error: "Nationality must be text." };
+  const v = raw.trim();
+  if (v.length < 3 || v.length > 40) return { ok: false, error: "Nationality must be 3-40 characters." };
   return { ok: true, value: v };
 }
 
@@ -72,6 +93,14 @@ export function validatePassengerField(
     case "berth": {
       const r = validateBerth(value);
       return r.ok ? { ok: true, patch: { berth: r.value } } : r;
+    }
+    case "category": {
+      const r = validateCategory(value);
+      return r.ok ? { ok: true, patch: { category: r.value } } : r;
+    }
+    case "nationality": {
+      const r = validateNationality(value);
+      return r.ok ? { ok: true, patch: { nationality: r.value } } : r;
     }
     case "food":
       return { ok: false, error: FOOD_UNSUPPORTED_ERROR };

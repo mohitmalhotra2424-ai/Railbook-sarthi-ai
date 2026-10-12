@@ -12,8 +12,10 @@ import { detectTtsLanguage, speakableText, spokenSentences } from "./lang";
  * audio) we fall back to the browser's speechSynthesis, spoken in
  * sentence-sized chunks for natural segmentation (Prompt 35). We speak ONLY the
  * actual assistant response (cleaned of markdown), never a new answer, and
- * never autoplay: playback starts from an explicit user action (speaker
- * button or a user-enabled conversation mode). A generation counter makes
+ * Prompt 45: playback starts automatically for every new assistant answer
+ * (autoplay default ON, toggle persisted) and can also be replayed/stopped from the speaker
+ * button. Browser autoplay restrictions may still require a user tap.
+ * A generation counter makes
  * obsolete audio/fetches unable to overtake a newer turn.
  */
 export interface SpeakApi {

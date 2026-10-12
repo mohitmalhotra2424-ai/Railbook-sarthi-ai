@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { TrainResultCards, type TrainCard } from "./TrainResultCards";
-import { PassengerFormPanel, type PassengerFormState } from "./PassengerFormPanel";
+import type { PassengerFormState } from "./PassengerFormPanel";
 import { ResultBlocks } from "./ResultBlocks";
 import type { ResultBlock } from "@/assistant/orchestrator";
 import {
@@ -168,12 +168,14 @@ function JourneyContext({ form }: { form: PassengerFormState }) {
   );
 }
 
-export function ChatClient({ initialMessage }: { initialMessage?: string }) {
+export function ChatClient({ initialMessage, passengerConversationId, onPassengerState, onBusyChange }: { initialMessage?: string; passengerConversationId?: string; onPassengerState?: (state: PassengerFormState) => void; onBusyChange?: (busy: boolean) => void }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [paxForm, setPaxForm] = useState<PassengerFormState | null>(null);
-  const paxPanelRef = useRef<HTMLDivElement | null>(null);
   const paxOpenRef = useRef(false);
+  const passengerCallback = useRef(onPassengerState);
+  useEffect(() => { passengerCallback.current = onPassengerState; }, [onPassengerState]);
+  const pendingPassengerRoute = useRef<string | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   // Concurrency safety (Prompt 19): synchronous double-send guard, abortable
@@ -193,6 +195,16 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
   // Voice (Prompt 9): browser-native STT/TTS — tap-to-talk by default.
   const [voiceLang, setVoiceLang] = useState<"hi-IN" | "en-IN">("hi-IN");
   const [conversationMode, setConversationMode] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(true);
+  useEffect(() => {
+    try {
+      // Reading a persisted preference after mount is the whole point here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAutoSpeak(localStorage.getItem("railsaarthi.autospeak") !== "off");
+    } catch {
+      /* private mode: default on */
+    }
+  }, []);
   const lastAutoSpokenRef = useRef<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -235,7 +247,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
 
   useEffect(() => {
     try {
-      conversationIdRef.current = localStorage.getItem("railsaarthi.cid");
+      conversationIdRef.current = passengerConversationId || localStorage.getItem("railsaarthi.cid");
     } catch {
       /* private mode — ephemeral conversation */
     }
@@ -246,7 +258,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
       abortRef.current?.abort();
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
     };
-  }, []);
+  }, [passengerConversationId]);
 
   useEffect(() => {
     if (nearBottomRef.current) {
@@ -254,15 +266,18 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
     }
   }, [messages]);
 
-  // Conversation mode: speak the newest assistant answer once it completes.
+  // Prompt 45: auto-play EVERY new assistant answer by default (no "Suno"
+  // tap needed) — neural server voice; toggle persisted, off = "off".
+  // Browsers may still block playback after an asynchronous reply; keep
+  // the explicit replay button and error handling as the fallback.
   useEffect(() => {
-    if (!conversationMode || busy) return;
+    if (!autoSpeak || busy || !speak.supported) return;
     const last = [...messages].reverse().find((m) => m.role === "assistant" && m.text);
     if (last && last.id !== lastAutoSpokenRef.current) {
       lastAutoSpokenRef.current = last.id;
       speak.speak(last.id, speechSummary(last));
     }
-  }, [conversationMode, busy, messages, speak]);
+  }, [autoSpeak, busy, messages, speak]);
 
   // Handoff from home (?q=): perform the real turn once, then clean the URL so
   // a refresh never re-sends the message.
@@ -401,10 +416,10 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                 const nowOpen = Boolean(nextForm.selection?.classCode);
                 paxOpenRef.current = nowOpen;
                 setPaxForm(nextForm);
-                // The form appears the moment a train is selected (tap, text or
-                // voice) — bring it into view so the user sees it open.
-                if (nowOpen && !wasOpen) {
-                  setTimeout(() => paxPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
+                passengerCallback.current?.(nextForm);
+                // Do not unmount/cancel the stream before its validated writes finish.
+                if (nowOpen && !wasOpen && !passengerCallback.current && conversationIdRef.current) {
+                  pendingPassengerRoute.current = `/passengers?c=${encodeURIComponent(conversationIdRef.current)}`;
                 }
                 break;
               }
@@ -479,9 +494,14 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
       } finally {
         setBusy(false);
         sendingRef.current = false;
+        if (alive() && !ac.signal.aborted && pendingPassengerRoute.current) {
+          const target = pendingPassengerRoute.current;
+          pendingPassengerRoute.current = null;
+          router.push(target);
+        }
       }
     },
-    [busy, patchMsg, restoreTextOnFailure, speak],
+    [busy, patchMsg, restoreTextOnFailure, speak, router],
   );
 
   function onSubmit(e: FormEvent) {
@@ -514,6 +534,8 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
     nearBottomRef.current = true;
     composerRef.current?.focus();
   }
+
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
 
   const hasVoice = voice.supported || speak.supported;
   const listening = voice.state === "recording" || voice.state === "processing";
@@ -551,7 +573,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
             data-testid="new-chat"
             aria-label="Start a new conversation"
             onClick={() => (confirmReset ? (setConfirmReset(false), newConversation()) : armConfirm())}
-            disabled={messages.length === 0}
+            disabled={!!passengerConversationId || messages.length === 0}
             className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition disabled:opacity-40 ${
               confirmReset
                 ? "border-alert-500/40 bg-alert-500/10 text-alert-500"
@@ -735,13 +757,17 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                 </div>
               ))}
 
-              {paxForm && (
-                <div ref={paxPanelRef}>
-                  <PassengerFormPanel
-                    state={paxForm}
-                    conversationId={conversationIdRef.current}
-                    onState={setPaxForm}
-                  />
+              {!passengerConversationId && paxForm?.selection?.classCode && (
+                <div data-testid="passenger-page-cta" className="rounded-xl border border-navy-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-sm text-navy-600">
+                    Passenger details alag page par khulti hain (IRCTC jaisa) — chat ke beech form nahi.
+                  </p>
+                  <Link
+                    href={`/passengers?c=${encodeURIComponent(conversationIdRef.current ?? "")}`}
+                    className="mt-2 inline-block rounded-lg bg-navy-600 px-4 py-2 text-sm font-bold text-white hover:bg-navy-500"
+                  >
+                    Passenger Details kholen →
+                  </Link>
                 </div>
               )}
             </div>
@@ -786,7 +812,29 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                   >
                     {voiceLang === "hi-IN" ? "हिंदी" : "EN"}
                   </button>
+                </>
+              )}
                   {speak.supported && (
+                    <>
+                    <button
+                      type="button"
+                      data-testid="autospeak-toggle"
+                      aria-pressed={autoSpeak}
+                      onClick={() => {
+                        const next = !autoSpeak;
+                        setAutoSpeak(next);
+                        try {
+                          localStorage.setItem("railsaarthi.autospeak", next ? "on" : "off");
+                        } catch {
+                          /* ignore */
+                        }
+                        if (!next) speak.stop();
+                      }}
+                      className="flex items-center gap-1.5 rounded-full border border-cream-300 bg-white px-3 py-1.5 text-xs font-semibold text-navy-600 transition hover:border-navy-300"
+                    >
+                      <SpeakerIcon className="h-3.5 w-3.5" />
+                      {autoSpeak ? "Auto-suno: On" : "Auto-suno: Off"}
+                    </button>
                     <button
                       type="button"
                       data-testid="conversation-mode"
@@ -800,9 +848,8 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
                     >
                       {conversationMode ? "● Conversation mode ON" : "Conversation mode"}
                     </button>
+                    </>
                   )}
-                </>
-              )}
               {(listening || voice.message) && (
                 <p
                   data-testid="voice-status"

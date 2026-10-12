@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * PROMPT 25 — passenger form UI wiring (TEST FIXTURES, clearly labelled).
- * The e2e server has no LLM credentials, so the form state arrives via a
- * fixture SSE stream; manual edits are answered by a fixture /api/passenger.
- * Real LLM-driven selection is verified separately by live/unit tests.
+ * PROMPT 45 — passenger details live on their own IRCTC-style NEXT PAGE
+ * (/passengers), never inside the chat (TEST FIXTURES, clearly labelled).
+ * The e2e server has no LLM credentials, so form state arrives via a fixture
+ * SSE stream; page reads/edits are answered by a fixture /api/passenger.
+ * Real LLM-driven collection is verified by unit tests (prompt45 suite) and
+ * live runs. Booking stays disabled — this covers data collection only.
  */
 
 const SELECTION = {
@@ -18,11 +20,14 @@ const SELECTION = {
   selectedAt: "2026-10-11T00:00:00.000Z",
 };
 
-function sseWithForm(passengers: unknown[], readiness?: unknown) {
+const INCOMPLETE = { ready: false, missingFields: ["passenger 1: age"], blockers: [{ code: "PASSENGER_INCOMPLETE", detail: "Passenger 1 is missing: age, gender, berth." }], warnings: [] };
+const COMPLETE = { ready: true, missingFields: [], blockers: [], warnings: [] };
+
+function sseWithForm(passengers: unknown[]) {
   return [
-    { type: "conversation", conversationId: "p25-fixture-conv-1" },
-    { type: "passenger_form", selection: SELECTION, passengers, ...(readiness ? { readiness, review: null } : {}) },
-    { type: "message", text: "Form khul gaya — age bataiye.", model: "fixture", viaFallback: false, cards: [] },
+    { type: "conversation", conversationId: "p45-fixture-conv-1" },
+    { type: "passenger_form", selection: SELECTION, passengers, readiness: INCOMPLETE, review: null },
+    { type: "message", text: "Form agle page par khul gaya — age bataiye.", model: "fixture", viaFallback: false, cards: [] },
     { type: "done" },
   ]
     .map((e) => `data: ${JSON.stringify(e)}`)
@@ -30,175 +35,189 @@ function sseWithForm(passengers: unknown[], readiness?: unknown) {
     .concat("\n\n");
 }
 
-test("passenger form opens automatically from backend form-state event; manual edits go through the validated path", async ({ page }) => {
-  await page.route("**/api/assistant", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm([{ name: "Rahul Sharma" }]) }),
-  );
-  // Fixture answers for the manual-edit endpoint (server store is empty in e2e)
-  await page.route("**/api/passenger", async (route) => {
-    const body = JSON.parse(route.request().postData() ?? "{}") as { field?: string; value?: string };
+function passengerApi(page: import("@playwright/test").Page, initial: unknown[], readiness: unknown = INCOMPLETE) {
+  const state = { passengers: initial as Record<string, unknown>[] };
+  return page.route("**/api/passenger**", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, selection: SELECTION, passengers: state.passengers, readiness, review: null, fare: null, availability: null, times: null }),
+      });
+      return;
+    }
+    const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>;
+    if (body.action === "add") {
+      state.passengers.push({ category: body.category ?? "passenger", nationality: "India" });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, selection: SELECTION, passengers: state.passengers, readiness, review: null }) });
+      return;
+    }
     if (body.field === "age" && body.value === "280") {
       await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ ok: false, error: "Age must be a whole number between 1 and 120." }) });
       return;
     }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ ok: true, selection: SELECTION, passengers: [{ name: "Rahul Sharma", age: 28 }] }),
-    });
+    const idx = Number(body.passengerIndex ?? 1) - 1;
+    if (body.field && state.passengers[idx]) state.passengers[idx][String(body.field)] = body.value;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, selection: SELECTION, passengers: state.passengers, readiness, review: null }) });
   });
+}
+
+test("Prompt 45: selecting train+class opens the IRCTC-style passenger PAGE (not the chat); edits flow through the validated path", async ({ page }) => {
+  await page.route("**/api/assistant", (route) =>
+    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm([{ name: "Rahul Sharma", nationality: "India" }]) }),
+  );
+  await passengerApi(page, [{ name: "Rahul Sharma", nationality: "India" }]);
 
   await page.goto("/chat");
   await page.getByLabel("Message").fill("3A mein select karo");
   await page.getByRole("button", { name: "Send" }).click();
 
-  // 1) Form opens automatically once train+class are selected (fixture state)
-  const form = page.getByTestId("passenger-form");
-  await expect(form).toBeVisible({ timeout: 10_000 });
-  await expect(form).toContainText("12951");
-  await expect(form).toContainText("3A");
-  await expect(form).toContainText("booking disabled");
+  // 1) Auto-navigates to the dedicated passenger page — the form is NOT in chat
+  await page.waitForURL("**/passengers**", { timeout: 10_000 });
+  await expect(page.getByTestId("passenger-page")).toBeVisible();
+  await expect(page.getByTestId("passenger-card-0")).toBeVisible();
+  await expect(page.getByTestId("name-0")).toHaveValue("Rahul Sharma");
 
-  // 2) Completed field shows its value; the next required field is highlighted
-  await expect(page.getByLabel("Passenger 1 Name")).toHaveValue("Rahul Sharma");
-  await expect(page.getByTestId("form-next-field")).toBeVisible();
+  // 2) IRCTC-style controls: gender + nationality + berth selects, add buttons,
+  //    the official under-5 children rule note, and the booking-disabled label
+  await expect(page.getByTestId("gender-0")).toBeVisible();
+  await expect(page.getByTestId("nationality-0")).toHaveValue("India");
+  await expect(page.getByTestId("berth-0")).toBeVisible();
+  await expect(page.getByTestId("add-passenger")).toBeVisible();
+  await expect(page.getByTestId("add-infant-with-berth")).toBeVisible();
+  await expect(page.getByTestId("add-infant-without-berth")).toBeVisible();
+  await expect(page.getByTestId("children-rule-note")).toContainText("under 5 years");
+  await expect(page.getByTestId("children-rule-note")).toContainText("full adult fare");
 
-  // 3) Unsupported capabilities are labelled, not faked
-  await expect(form).toContainText("Food preference: not supported");
-  await expect(form).toContainText("no authorised provider verifies berth options");
-  await expect(form.getByLabel(/Food/i)).toHaveCount(0); // no food field exists
-
-  // 4) Invalid manual edit is rejected WITHOUT corrupting state
-  const age = page.getByLabel("Passenger 1 Age");
+  // 3) Invalid edit rejected by the SAME validation as chat (fixture 400)
+  const age = page.getByTestId("age-0");
   await age.fill("280");
   await age.blur();
-  await expect(page.getByTestId("form-field-error")).toContainText("Age must be a whole number");
-  await expect(age).toHaveValue("280"); // UI keeps the typed value for correction; state unchanged
+  await expect(page.locator("text=Age must be a whole number")).toBeVisible({ timeout: 5_000 });
 
-  // 5) Valid manual edit flows through the validated path and updates the form
+  // 4) Valid edit persists and re-renders from the authoritative snapshot
   await age.fill("28");
   await age.blur();
-  await expect(page.getByTestId("form-field-error")).toHaveCount(0);
-  await expect(page.getByLabel("Passenger 1 Age")).toHaveValue("28");
+  await expect.poll(async () => (await age.inputValue()) === "28").toBe(true);
 });
 
-test("New Chat clears the passenger form — no state leak into a fresh conversation", async ({ page }) => {
+test("Prompt 45: infant without berth needs no berth; + Add Infant Without Berth creates one with the free-travel label", async ({ page }) => {
   await page.route("**/api/assistant", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm([{ name: "Rahul Sharma", age: 28, gender: "male" }]) }),
+    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm([{ name: "Rahul Sharma", age: 30, gender: "male", berth: "Lower Berth" }]) }),
   );
+  await passengerApi(page, [{ name: "Rahul Sharma", age: 30, gender: "male", berth: "Lower Berth" }]);
 
   await page.goto("/chat");
   await page.getByLabel("Message").fill("select karo");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByTestId("passenger-form")).toBeVisible({ timeout: 10_000 });
+  await page.waitForURL("**/passengers**", { timeout: 10_000 });
 
-  const newChat = page.getByTestId("new-chat");
-  await newChat.click();
-  await newChat.click();
-  await expect(page.getByTestId("passenger-form")).toHaveCount(0);
-  await expect(page.getByLabel("Passenger 1 Name")).toHaveCount(0);
+  await page.getByTestId("add-infant-without-berth").click();
+  await expect(page.getByTestId("passenger-card-1")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByTestId("passenger-card-1")).toContainText("Infant (no berth — free)");
+  await expect(page.getByTestId("berth-1")).toContainText("Not applicable");
 });
 
-test("Prompt 30: journey review shows authoritative selection + per-passenger completion, never fabricated data", async ({ page }) => {
-  // Incomplete passenger: review must name the exact missing fields.
+test("Prompt 45: Proceed to Review is gated on readiness; complete details unlock the review page link", async ({ page }) => {
   await page.route("**/api/assistant", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm([{ name: "Rahul Sharma" }]) }),
+    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm([{ name: "Rahul Sharma", nationality: "India" }]) }),
   );
+  await passengerApi(page, [{ name: "Rahul Sharma", nationality: "India" }]);
+
   await page.goto("/chat");
   await page.getByLabel("Message").fill("select karo");
   await page.getByRole("button", { name: "Send" }).click();
+  await page.waitForURL("**/passengers**", { timeout: 10_000 });
 
-  const review = page.getByTestId("journey-review");
-  await expect(review).toBeVisible({ timeout: 10_000 });
-  await expect(review).toContainText("12951 — Morning Express");
-  await expect(review).toContainText("2026-10-12");
-  await expect(review).toContainText("LDH → NDLS");
-  await expect(review).toContainText("3A");
-  await expect(page.getByTestId("review-pax-1")).toContainText("missing: age, gender, berth");
-  await expect(page.getByTestId("review-ready")).toHaveCount(0); // not complete, no false readiness
-
-  // Prompt 31 (owner rule): name+age+gender saved but berth MISSING → still NOT
-  // complete, review stays blocked on the missing field.
-  const READY_FALSE_BERTH = {
-    ready: false,
-    missingFields: ["passenger 1: berth"],
-    blockers: [{ code: "PASSENGER_INCOMPLETE", detail: "Passenger 1 is missing: berth." }],
-    warnings: [],
-  };
-  await page.route("**/api/assistant", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "text/event-stream",
-      body: sseWithForm([{ name: "Rahul Sharma", age: 28, gender: "male" }], READY_FALSE_BERTH),
-    }),
-  );
-  await page.goto("/chat");
-  await page.getByLabel("Message").fill("select karo");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByTestId("review-pax-1")).toContainText("missing: berth");
-  await expect(page.getByTestId("review-blocked")).toContainText("missing: passenger 1: berth");
-  await expect(page.getByTestId("review-ready")).toHaveCount(0);
-  await expect(page.getByTestId("build-review")).toHaveCount(0);
-
-  // Complete passenger INCLUDING berth (fresh load): readiness shown honestly,
-  // booking still disabled, review can be built.
-  const READY_TRUE = { ready: true, missingFields: [], blockers: [], warnings: [] };
-  await page.route("**/api/assistant", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "text/event-stream",
-      body: sseWithForm([{ name: "Rahul Sharma", age: 28, gender: "male", berth: "lower" }], READY_TRUE),
-    }),
-  );
-  await page.goto("/chat");
-  await page.getByLabel("Message").fill("select karo");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByTestId("review-pax-1")).toContainText("Passenger 1 complete");
-  await expect(page.getByTestId("review-ready")).toContainText("booking execution is disabled");
-  await expect(page.getByTestId("build-review")).toBeVisible();
+  // Incomplete → blocker listed, review link disabled (no false readiness)
+  await expect(page.getByTestId("proceed-to-review")).toHaveAttribute("aria-disabled", "true");
+  await expect(page.locator("text=Passenger 1 is missing: age, gender, berth.")).toBeVisible();
 });
 
-test("Prompt 31: review → confirm → IRCTC_HANDOFF_READY via the validated backend path", async ({ page }) => {
-  const COMPLETE = [{ name: "Rahul Sharma", age: 28, gender: "male", berth: "lower" }];
-  const READY_TRUE = { ready: true, missingFields: [], blockers: [], warnings: [] };
+test("Prompt 45: with complete authoritative details the review link points at the review page", async ({ page }) => {
+  const full = [{ name: "Rahul Sharma", age: 30, gender: "male", berth: "Lower Berth", nationality: "India" }];
   await page.route("**/api/assistant", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm(COMPLETE, READY_TRUE) }),
+    route.fulfill({ status: 200, contentType: "text/event-stream", body: sseWithForm(full) }),
   );
-  await page.route("**/api/passenger", async (route) => {
-    const body = JSON.parse(route.request().postData() ?? "{}") as { action?: string };
-    if (body.action === "review") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          ok: true, selection: SELECTION, passengers: COMPLETE, readiness: READY_TRUE,
-          review: { version: 1, builtAt: "2026-10-11T00:00:00.000Z", status: "awaiting_confirmation", snapshot: "fx" },
-        }),
-      });
-      return;
-    }
-    if (body.action === "confirm") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          ok: true, selection: SELECTION, passengers: COMPLETE, readiness: READY_TRUE,
-          review: { version: 1, builtAt: "2026-10-11T00:00:00.000Z", status: "confirmed", snapshot: "fx" },
-          handoff: "IRCTC_HANDOFF_READY",
-        }),
-      });
-      return;
-    }
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, selection: SELECTION, passengers: COMPLETE, readiness: READY_TRUE, review: null }) });
+  await passengerApi(page, full, COMPLETE);
+
+  await page.goto("/chat");
+  await page.getByLabel("Message").fill("select karo");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.waitForURL("**/passengers**", { timeout: 10_000 });
+
+  const link = page.getByTestId("proceed-to-review");
+  await expect(link).toHaveAttribute("aria-disabled", "false");
+  await expect(link).toHaveAttribute("href", /\/review\?c=p45-fixture-conv-1/);
+  await link.click();
+  await page.waitForURL("**/review**");
+});
+
+test("same assistant SSE save event updates passenger fields without refetch or remount", async ({ page }) => {
+  let reads = 0;
+  await page.route("**/api/passenger**", (route) => {
+    reads++;
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ selection: SELECTION, passengers: [{ name: "Mohit", age: 30 }], readiness: INCOMPLETE }) });
   });
-
-  await page.goto("/chat");
-  await page.getByLabel("Message").fill("select karo");
+  await page.route("**/api/assistant", (route) => {
+    expect(route.request().postDataJSON().conversationId).toBe("p45-fixture-conv-1");
+    return route.fulfill({ contentType: "text/event-stream", body: sseWithForm([{ name: "Mohit", age: 30, gender: "male", berth: "Lower" }]) });
+  });
+  await page.goto("/passengers?c=p45-fixture-conv-1");
+  await expect(page.getByTestId("gender-0")).toHaveValue("");
+  await page.getByRole("button", { name: "Fill by voice / chat" }).click();
+  const before = reads;
+  await page.getByLabel("Message").fill("Male, lower berth");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByTestId("build-review")).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId("build-review").click();
-  await expect(page.getByTestId("review-awaiting")).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId("confirm-review").click();
-  await expect(page.getByTestId("handoff-ready")).toContainText("IRCTC_HANDOFF_READY");
-  await expect(page.getByTestId("handoff-ready")).toContainText("not enabled");
+  await expect(page.getByTestId("gender-0")).toHaveValue("male");
+  await expect(page.getByTestId("berth-0")).toHaveValue("Lower");
+  expect(reads).toBe(before); // update arrived from SSE, not interval polling
+  await expect(page).toHaveURL(/\/passengers/);
+  await expect(page.getByTestId("new-chat")).toBeDisabled(); // cannot silently switch session under form
+});
+
+test("server-updated name and age replace initial values without remount", async ({ page }) => {
+  await page.route("**/api/passenger**", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ selection: SELECTION, passengers: [{ name: "Mohit", age: 30 }], readiness: INCOMPLETE }) }));
+  await page.route("**/api/assistant", (route) => route.fulfill({ contentType: "text/event-stream", body: sseWithForm([{ name: "Mohit Kumar", age: 31 }]) }));
+  await page.goto("/passengers?c=p45-fixture-conv-1");
+  await expect(page.getByTestId("name-0")).toHaveValue("Mohit");
+  await page.getByRole("button", { name: "Fill by voice / chat" }).click();
+  await page.getByLabel("Message").fill("Name Mohit Kumar, age 31");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByTestId("name-0")).toHaveValue("Mohit Kumar");
+  await expect(page.getByTestId("age-0")).toHaveValue("31");
+});
+
+test("voice transcript on the passenger page uses the same assistant session and updates the visible form", async ({ page }) => {
+  await page.addInitScript(`
+    class Recognition {
+      constructor() { window.__p45rec = this; }
+      start() { if (this.onstart) this.onstart(); }
+      abort() { if (this.onend) this.onend(); }
+      stop() { if (this.onend) this.onend(); }
+    }
+    Object.defineProperty(window, 'SpeechRecognition', { configurable:true, value:Recognition });
+    Object.defineProperty(window, 'webkitSpeechRecognition', { configurable:true, value:Recognition });
+  `);
+  await page.route("**/api/passenger**", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ selection: SELECTION, passengers: [{ name: "Mohit", age: 30 }], readiness: INCOMPLETE }) }));
+  let calls = 0;
+  await page.route("**/api/assistant", (r) => {
+    calls++;
+    expect(r.request().postDataJSON().conversationId).toBe("p45-fixture-conv-1");
+    expect(r.request().postDataJSON().message).toContain("लोअर");
+    return r.fulfill({ contentType: "text/event-stream", body: sseWithForm([{ name: "Mohit", age: 30, gender: "male", berth: "लोअर बर्थ" }]) });
+  });
+  await page.goto("/passengers?c=p45-fixture-conv-1");
+  await page.getByRole("button", { name: "Fill by voice / chat" }).click();
+  await page.getByTestId("mic-button").click();
+  await page.evaluate(() => {
+    const w = window as unknown as { __p45rec: { onresult: (e: unknown) => void; onend: () => void } };
+    w.__p45rec.onresult({ resultIndex: 0, results: { length: 1, 0: { isFinal: true, 0: { transcript: "पुरुष, लोअर बर्थ" } } } });
+    w.__p45rec.onend();
+  });
+  await expect(page.getByLabel("Message")).toHaveValue("पुरुष, लोअर बर्थ");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByTestId("gender-0")).toHaveValue("male");
+  await expect(page.getByTestId("berth-0")).toHaveValue("लोअर बर्थ");
+  expect(calls).toBe(1);
 });

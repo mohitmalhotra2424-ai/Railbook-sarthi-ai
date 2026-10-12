@@ -48,6 +48,12 @@ function sse(text: string) {
 }
 
 async function openChat(page: import("@playwright/test").Page, text: string) {
+  // Prompt 45: autoplay is ON by default — this spec verifies the explicit
+  // speaker-button (replay/stop) semantics, so pin autoplay off here; the
+  // default-on behaviour has its own spec (auto-speak.spec.ts).
+  await page.addInitScript(() => {
+    try { localStorage.setItem("railsaarthi.autospeak", "off"); } catch { /* ignore */ }
+  });
   await page.route("**/api/assistant", (r) =>
     r.fulfill({ status: 200, contentType: "text/event-stream", body: sse(text) }),
   );

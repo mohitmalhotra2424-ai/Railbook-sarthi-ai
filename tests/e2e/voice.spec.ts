@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+// Manual replay/stop regressions run with autoplay OFF. Default-on is covered
+// separately by auto-speak.spec.ts (including no speaker-button interaction).
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("railsaarthi.autospeak", "off"));
+});
 
 interface FakeRec {
   emitFinal(transcript: string): void;

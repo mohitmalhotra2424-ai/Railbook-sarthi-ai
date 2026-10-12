@@ -78,6 +78,24 @@ export interface PassengerDraft {
   gender?: "male" | "female" | "other";
   /** Berth preference is a REQUEST only — no authorised provider verifies options. */
   berth?: string;
+  /** Prompt 45 (IRCTC-style passenger page): "passenger" (default) or an
+   *  infant entry. Rule (IRCTC): children UNDER 5 travel free with no ticket
+   *  when NO separate berth is requested; if a berth is requested the full
+   *  adult fare applies. Details are still recorded. */
+  category?: PassengerCategory;
+  /** IRCTC-style nationality field; defaults to India on the form. */
+  nationality?: string;
+}
+
+export type PassengerCategory = "passenger" | "infant_with_berth" | "infant_without_berth";
+
+/** Prompt 45 — required fields for THIS passenger: an infant without berth
+ *  (IRCTC rule: under 5, no separate berth, free, no ticket) does not need a
+ *  berth; every other passenger still needs every form field (Prompt 31 rule). */
+export function requiredFieldsFor(p: PassengerDraft): readonly (keyof PassengerDraft)[] {
+  return p.category === "infant_without_berth"
+    ? REQUIRED_PASSENGER_FIELDS.filter((f) => f !== "berth")
+    : REQUIRED_PASSENGER_FIELDS;
 }
 
 export const MAX_PASSENGERS = 6;
@@ -351,8 +369,8 @@ export class ConversationStore {
     const pax = conv.passengers.length
       ? conv.passengers
           .map((p, i) => {
-            const missing = REQUIRED_PASSENGER_FIELDS.filter((f) => p[f] === undefined);
-            return `  P${i + 1}: ${p.name ? `name=${p.name} ` : ""}${p.age !== undefined ? `age=${p.age} ` : ""}${p.gender ? `gender=${p.gender} ` : ""}${p.berth ? `berth-request=${p.berth} ` : ""}${missing.length ? `MISSING: ${missing.join(",")}` : "complete"}`;
+            const missing = requiredFieldsFor(p).filter((f) => p[f] === undefined);
+            return `  P${i + 1}: ${p.name ? `name=${p.name} ` : ""}${p.age !== undefined ? `age=${p.age} ` : ""}${p.gender ? `gender=${p.gender} ` : ""}${p.berth ? `berth-request=${p.berth} ` : ""}${p.category ? `category=${p.category} ` : ""}${p.nationality ? `nationality=${p.nationality} ` : ""}${missing.length ? `MISSING: ${missing.join(",")}` : "complete"}`;
           })
           .join("\n")
       : "  (none yet)";
@@ -410,25 +428,36 @@ export class ConversationStore {
       return { ok: false, error: "Complete the current passenger before adding another." };
     }
     const last = conv.passengers[conv.passengers.length - 1];
-    if (index === conv.passengers.length + 1 && last && !REQUIRED_PASSENGER_FIELDS.every((f) => last[f] !== undefined)) {
+    if (index === conv.passengers.length + 1 && last && !requiredFieldsFor(last).every((f) => last[f] !== undefined)) {
       return { ok: false, error: "Complete the current passenger before adding another." };
     }
+    const candidate = { ...conv.passengers[index - 1], ...patch };
+    if ((candidate.category === "infant_with_berth" || candidate.category === "infant_without_berth") && candidate.age !== undefined && candidate.age >= 5) {
+      return { ok: false, error: "Infant category requires age under 5 on journey date. Change passenger type first." };
+    }
+    if (candidate.category === "infant_without_berth") {
+      if (patch.berth !== undefined) return { ok: false, error: "Choose with-berth category before requesting a berth." };
+      delete candidate.berth;
+    }
     while (conv.passengers.length < index) conv.passengers.push({});
-    conv.passengers[index - 1] = { ...conv.passengers[index - 1], ...patch };
+    conv.passengers[index - 1] = candidate;
     conv.review = undefined; // Prompt 31: passenger detail change invalidates review
     conv.updatedAt = new Date().toISOString();
     return { ok: true, passengers: conv.passengers };
   }
 
-  addPassenger(id: string): { ok: true; passengers: PassengerDraft[] } | { ok: false; error: string } {
+  addPassenger(
+    id: string,
+    category?: PassengerCategory,
+  ): { ok: true; passengers: PassengerDraft[] } | { ok: false; error: string } {
     const conv = this.getOrCreate(id);
     if (!conv.selection?.classCode) return { ok: false, error: "No valid train+class selected yet." };
     if (conv.passengers.length >= MAX_PASSENGERS) return { ok: false, error: `Maximum ${MAX_PASSENGERS} passengers.` };
     const last = conv.passengers[conv.passengers.length - 1];
-    if (last && !REQUIRED_PASSENGER_FIELDS.every((f) => last[f] !== undefined)) {
+    if (last && !requiredFieldsFor(last).every((f) => last[f] !== undefined)) {
       return { ok: false, error: "Complete the current passenger before adding another." };
     }
-    conv.passengers.push({});
+    conv.passengers.push(category ? { category, nationality: "India" } : { nationality: "India" });
     conv.review = undefined; // Prompt 31: passenger count change invalidates review
     conv.updatedAt = new Date().toISOString();
     return { ok: true, passengers: conv.passengers };
