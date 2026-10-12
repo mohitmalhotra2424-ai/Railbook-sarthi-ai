@@ -212,9 +212,24 @@ export class ConversationStore {
           ref.route?.from &&
           old.route?.from &&
           (ref.route.from !== old.route.from || (ref.route.to ?? "") !== (old.route.to ?? ""));
-        if (dateChanged || routeChanged) {
+        // A newer SEARCH_TRAINS for the SAME route+date is a newer result
+        // version — the older list must not stay selectable alongside it.
+        const sameJourneyRefresh =
+          tool === "SEARCH_TRAINS" &&
+          !dateChanged &&
+          !routeChanged &&
+          !!ref.journeyDate &&
+          ref.journeyDate === old.journeyDate &&
+          !!ref.route?.from &&
+          ref.route.from === old.route?.from &&
+          (ref.route.to ?? "") === (old.route?.to ?? "");
+        if (dateChanged || routeChanged || sameJourneyRefresh) {
           old.supersededBy = refId;
-          old.supersededReason = dateChanged ? "journey date changed" : "route changed";
+          old.supersededReason = dateChanged
+            ? "journey date changed"
+            : routeChanged
+              ? "route changed"
+              : "newer search for the same route/date";
           // Prompt 25 §7: a changed journey invalidates selection + form state.
           if (conv.selection) {
             conv.selection = undefined;

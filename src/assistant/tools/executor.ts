@@ -164,36 +164,98 @@ export async function executeTool(
     const a = args as z.infer<typeof TOOL_ARG_SCHEMAS.SELECT_TRAIN>;
     const conv = p25store.getOrCreate(meta.conversationId);
     const searchRefs = conv.results.filter((r) => r.tool === "SEARCH_TRAINS" && !r.supersededBy && r.items?.length);
-    let hit: { item: { index: number; label: string; classes?: string[] }; ref: (typeof searchRefs)[number] } | null = null;
-    for (const ref of [...searchRefs].reverse()) {
-      // Match the train number as a FULL token — a prefix (e.g. "1203") must
-      // never silently select "12030 …" when identities could be ambiguous.
-      const item = ref.items!.find((i) => i.label === a.trainNumber || i.label.startsWith(`${a.trainNumber} `));
-      if (item) {
-        hit = { item, ref };
-        break;
-      }
+    type Row = { index: number; label: string; classes?: string[] };
+    type Hit = { row: Row; ref: (typeof searchRefs)[number] };
+    const numOf = (label: string) => label.split(" ")[0];
+    const nameOf = (label: string) =>
+      label.replace(/^\d+\s+/, "").replace(/\s+dep\s.*$/, "").trim();
+    // Conservative normalization: case, repeated whitespace, common punctuation.
+    const norm = (v: string) =>
+      v.toUpperCase().replace(/[.,;:!?'"–—()\[\]{}]/g, " ").replace(/\s+/g, " ").trim();
+
+    const hits: Hit[] = [];
+    const missing: string[] = [];
+
+    // Position: 1-based against the NEWEST current result list — the same
+    // numbering the UI cards and numbered context items show the user.
+    if (a.resultPosition !== undefined) {
+      const newest = searchRefs[searchRefs.length - 1];
+      const row = newest?.items?.[a.resultPosition - 1];
+      if (row) hits.push({ row, ref: newest });
+      else missing.push(`position ${a.resultPosition} (the current results hold ${newest?.items?.length ?? 0} trains)`);
     }
-    if (!hit) {
+    // Number: exact FULL-token match (never prefix/substring/fuzzy), newest first.
+    if (a.trainNumber) {
+      let found: Hit | null = null;
+      for (const ref of [...searchRefs].reverse()) {
+        const row = ref.items!.find((i) => i.label === a.trainNumber || i.label.startsWith(`${a.trainNumber} `));
+        if (row) {
+          found = { row, ref };
+          break;
+        }
+      }
+      if (found) hits.push(found);
+      else missing.push(`train number ${a.trainNumber}`);
+    }
+    // Name: normalized match against the full current results; a unique match
+    // selects, anything ambiguous asks for clarification — never a guess.
+    if (a.trainName) {
+      const q = norm(a.trainName);
+      let matches: Hit[] = [];
+      for (const ref of [...searchRefs].reverse()) {
+        for (const row of ref.items!) {
+          const n = norm(nameOf(row.label));
+          if (n === q || n.includes(q)) matches.push({ row, ref });
+        }
+      }
+      const exact = matches.filter((m) => norm(nameOf(m.row.label)) === q);
+      if (exact.length) matches = exact;
+      const unique = [...new Map(matches.map((m) => [numOf(m.row.label), m])).values()];
+      if (unique.length === 1) hits.push(unique[0]);
+      else if (unique.length > 1) {
+        return {
+          ...baseResult(tool, meta, "error"),
+          note: `"${a.trainName}" matches ${unique.length} trains in the current results (${unique
+            .slice(0, 4)
+            .map((m) => `${numOf(m.row.label)} ${nameOf(m.row.label)}`)
+            .join("; ")}${unique.length > 4 ? "; …" : ""}). Nothing was selected — ask the user for the exact train NUMBER they mean.`,
+        };
+      } else missing.push(`train name "${a.trainName}"`);
+    }
+
+    if (missing.length || !hits.length) {
       return {
         ...baseResult(tool, meta, "error"),
-        note: `Train ${a.trainNumber} is NOT in the current valid search results — nothing was selected. Ask the user to choose from the listed trains, or re-run SEARCH_TRAINS.`,
+        note: `${missing.join(", ") || "The requested train"} is NOT in the current valid search results — nothing was selected. Ask the user to choose from the listed trains, or re-run SEARCH_TRAINS.`,
       };
     }
-    const trainName = hit.item.label.split(" ").slice(1).join(" ").replace(/dep .*$/, "").trim() || undefined;
+    // Every supplied identity must point at the SAME train — conflicts are
+    // never resolved by silently preferring one field.
+    const nums = new Set(hits.map((h) => numOf(h.row.label)));
+    if (nums.size > 1) {
+      return {
+        ...baseResult(tool, meta, "error"),
+        note: `The supplied identities conflict — they point at different trains (${[...nums].join(", ")}). Nothing was selected — ask the user to confirm the exact train number.`,
+      };
+    }
+    const hit = hits[0];
+    const trainNumber = numOf(hit.row.label); // authoritative identity from the result row
+    const trainName = nameOf(hit.row.label) || undefined;
     p25store.setSelection(conv.id, {
-      trainNumber: a.trainNumber,
+      trainNumber,
       trainName,
       from: hit.ref.route?.from,
       to: hit.ref.route?.to,
       journeyDate: hit.ref.journeyDate,
-      classes: hit.item.classes,
+      classes: hit.row.classes,
       selectedAt: new Date().toISOString(),
     });
     return {
       ...baseResult(tool, meta, "ok"),
-      note: `Train ${a.trainNumber}${trainName ? ` (${trainName})` : ""} SELECTED and validated against the current search results; the UI was updated.${hit.item.classes?.length ? ` Supported classes: ${hit.item.classes.join(", ")}.` : " Class support could not be verified from provider data."} Confirm the selection to the user.`,
-      data: { trainNumber: a.trainNumber, classes: hit.item.classes ?? [] },
+      note: `Train ${trainNumber}${trainName ? ` (${trainName})` : ""} SELECTED and validated against the current search results; the UI was updated.${
+        hit.row.classes?.length ? ` Supported classes: ${hit.row.classes.join(", ")}.` : " Class support could not be verified from provider data."
+      } Confirm the selection to the user.`,
+      data: { trainNumber, classes: hit.row.classes ?? [] },
     };
   }
   if (tool === "SELECT_CLASS") {

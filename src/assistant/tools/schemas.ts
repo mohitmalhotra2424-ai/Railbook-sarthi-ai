@@ -101,9 +101,29 @@ export const GeneralRailwayAnswerArgs = z.object({
   language: z.enum(["hi", "hinglish", "en"]).optional().describe("Language of the user's question"),
 });
 
-export const SelectTrainArgs = z.object({
-  trainNumber: numericString(/^\d{4,6}$/, "4-6 digit train number").describe("The train number to select; must exist in the current non-superseded SEARCH_TRAINS results."),
-});
+export const SelectTrainArgs = z
+  .object({
+    trainNumber: numericString(/^\d{4,6}$/, "4-6 digit train number")
+      .optional()
+      .describe("Exact 4-6 digit train number as stated by the user; must exist in the current non-superseded SEARCH_TRAINS results. Never guessed or completed from a partial number."),
+    trainName: z
+      .string()
+      .trim()
+      .min(2)
+      .max(120)
+      .optional()
+      .describe("Train name exactly as the user stated it — do NOT guess, complete or normalize it yourself; the backend matches it against the full current results."),
+    resultPosition: z
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .optional()
+      .describe("1-based position in the COMPLETE displayed search result list (the same numbering the user sees on the UI cards and numbered items), e.g. 25 for 'the 25th train'."),
+  })
+  .refine((a) => a.trainNumber || a.trainName || a.resultPosition, {
+    message: "SELECT_TRAIN needs at least one of trainNumber, trainName or resultPosition",
+  });
 
 export const SelectClassArgs = z.object({
   classCode: z.string().min(1).max(4).describe("Travel class code as returned by the provider for the selected train, e.g. 'SL', '3A', '2A', '1A', 'CC'."),
@@ -314,11 +334,15 @@ export const TOOL_DEFINITIONS: ChatToolDef[] = [
     function: {
       name: "SELECT_TRAIN",
       description:
-        "Select a train FROM THE CURRENT NON-SUPERSEDED SEARCH_TRAINS RESULTS in CONTEXT (resolve 'pehli wali', 'doosri', names or numbers against those item indexes). The backend re-validates the number against those results; a train absent from them is rejected. Call this when the user chooses a train; confirm only after the tool returns ok.",
+        "Select a train FROM THE CURRENT NON-SUPERSEDED SEARCH_TRAINS RESULTS. Pass the user's stated identity through as-is — trainNumber (exact 4-6 digit number), trainName (the name exactly as the user said it; never guessed), and/or resultPosition (1-based position in the complete displayed result list, the same numbering as the numbered items). The backend resolves the identity against the FULL current results (including trains not listed in context), rejects conflicting or ambiguous identities, and reports which train was selected. Call this when the user chooses a train; confirm only after the tool returns ok.",
       parameters: {
         type: "object",
-        properties: { trainNumber: str("4-6 digit train number present in the current valid search results") },
-        required: ["trainNumber"],
+        properties: {
+          trainNumber: str("Exact 4-6 digit train number stated by the user"),
+          trainName: str("Train name exactly as the user stated it (do not guess or complete it)"),
+          resultPosition: { type: "integer", description: "1-based position in the complete displayed result list, as stated by the user (e.g. 25 for 'the 25th train')" },
+        },
+        required: [],
       },
     },
   },
