@@ -195,6 +195,8 @@ test("speaker plays the ACTUAL assistant reply without markdown; stop halts play
   await expect(speakBtn).toBeVisible({ timeout: 15_000 });
   await speakBtn.click();
 
+  // server TTS is not configured in E2E → async 503 → browser fallback speaks
+  await page.waitForFunction(() => (window as unknown as VoiceTestWindow).__tts.spoken.length > 0, undefined, { timeout: 10_000 });
   const spoken = await page.evaluate(() => (window as unknown as VoiceTestWindow).__tts.spoken);
   expect(spoken).toHaveLength(1);
   expect(spoken[0].lang).toBe("hi-IN"); // Devanagari detected

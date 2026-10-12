@@ -274,7 +274,9 @@ it("N: 'haan' over chat cannot confirm; no confirmation tool exists for the mode
 /* R — no booking/payment/OTP/CAPTCHA execution surface exists */
 it("R: API surface is read-only railway queries + assistant + passenger data; no booking routes", () => {
   const top = readdirSync("src/app/api").sort();
-  expect(top).toEqual(["assistant", "health", "passenger", "railway"]);
+  // "voice" = server-side TTS proxy (Prompt 34 addendum); read-only railway
+  // queries + assistant + passenger data + TTS — still no booking surface.
+  expect(top).toEqual(["assistant", "health", "passenger", "railway", "voice"]);
   const railway = readdirSync("src/app/api/railway").sort();
   expect(railway).toEqual(["availability", "cancellations", "fare", "live-status", "pnr", "search", "stations", "timetable", "train"]);
   const store = new ConversationStore() as unknown as Record<string, unknown>;
