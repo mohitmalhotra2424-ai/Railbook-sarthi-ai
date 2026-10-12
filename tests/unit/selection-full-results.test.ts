@@ -7,10 +7,11 @@ import { registerAdapter, unregisterAdapter } from "@/providers/registry";
 import type { ResultEnvelope, SourceInfo, TrainSearchProvider } from "@/providers/types";
 
 /**
- * Train-list / SELECT_TRAIN consistency (verified mismatch fix): the UI cards
- * render the FULL provider list, so selection must validate against that same
- * full authoritative set — not the 8-item conversational rendering. The LLM's
- * rendered context stays capped at 8. Deterministic doubles only.
+ * PROMPT 35 — full-results & voice/chat train-selection consistency.
+ * The UI cards render the FULL provider list, so SELECT_TRAIN must validate
+ * against that same complete authoritative set (any position), while the
+ * LLM's rendered conversational context stays capped at 8 summaries.
+ * Deterministic doubles only: scripted LLM (test double) + fixture provider.
  */
 
 const src = (id: string): SourceInfo => ({
@@ -20,7 +21,17 @@ const src = (id: string): SourceInfo => ({
   authorization: "configured",
 });
 
-/** 30 rows for 2026-10-12 (12030-at-#25 style case); 1 different row next day. */
+const ROW_COUNT = 120; // realistic fixture >100 rows
+const rowAt = (i: number) => ({
+  trainNumber: String(90001 + i),
+  trainName: `Full List Express ${i + 1}`,
+  from: { code: "LDH", name: "Ludhiana" },
+  to: { code: "NDLS", name: "Delhi" },
+  departure: "06:15",
+  arrival: "10:30",
+  classes: ["CC", "EC"],
+});
+
 function fixtureAdapter(): TrainSearchProvider {
   return {
     id: "sfr-search",
@@ -31,28 +42,13 @@ function fixtureAdapter(): TrainSearchProvider {
     },
     async search(q, ctx): Promise<ResultEnvelope<never>> {
       const date = (q as { date?: string }).date;
+      const to = (q as { to?: string }).to ?? "NDLS";
       const rows =
         date === "2026-10-13"
-          ? [
-              {
-                trainNumber: "91001",
-                trainName: "Next Day Express",
-                from: { code: "LDH", name: "Ludhiana" },
-                to: { code: "NDLS", name: "Delhi" },
-                departure: "07:00",
-                arrival: "11:00",
-                classes: ["CC"],
-              },
-            ]
-          : Array.from({ length: 30 }, (_, i) => ({
-              trainNumber: String(90001 + i),
-              trainName: `Full List Express ${i + 1}`,
-              from: { code: "LDH", name: "Ludhiana" },
-              to: { code: "NDLS", name: "Delhi" },
-              departure: "06:15",
-              arrival: "10:30",
-              classes: ["CC", "EC"],
-            }));
+          ? [{ ...rowAt(0), trainNumber: "91001", trainName: "Next Day Express" }]
+          : to === "ASR"
+            ? [{ ...rowAt(0), trainNumber: "92001", trainName: "Amritsar Mail", to: { code: "ASR", name: "Amritsar" } }]
+            : Array.from({ length: ROW_COUNT }, (_, i) => rowAt(i));
       return okEnvelope({
         data: rows,
         source: src("sfr-search"),
@@ -110,16 +106,13 @@ async function drain(run: AsyncIterable<TurnEvent>): Promise<TurnEvent[]> {
   return out;
 }
 
-async function searchTurn(store: ConversationStore, cid: string, date: string) {
+async function searchTurn(store: ConversationStore, cid: string, date = "2026-10-12", to = "NDLS") {
   return drain(
     runTurn({
       conversationId: cid,
       message: "trains dikhao",
       store,
-      clientFactory: oneClient([
-        tools("s1", "SEARCH_TRAINS", { from: "LDH", to: "NDLS", date }),
-        text("Ye trains hain."),
-      ]),
+      clientFactory: oneClient([tools("s1", "SEARCH_TRAINS", { from: "LDH", to, date }), text("Ye trains hain.")]),
     }),
   );
 }
@@ -138,63 +131,137 @@ async function selectTurn(store: ConversationStore, cid: string, trainNumber: st
 const toolResultOf = (ev: TurnEvent[]) =>
   ev.find((e) => e.type === "tool_result") as Extract<TurnEvent, { type: "tool_result" }>;
 
-it("a train within the first 8 results can still be selected", async () => {
+/* ---------- position coverage: first 8, 25, 40, 100+ ---------- */
+
+it("a train among the first 8 results can be selected (positions 3 and 8)", async () => {
   const store = new ConversationStore();
-  await searchTurn(store, "fr-1", "2026-10-12");
-  const ev = await selectTurn(store, "fr-1", "90003");
-  expect(toolResultOf(ev).status).toBe("ok");
+  await searchTurn(store, "fr-1");
+  expect(toolResultOf(await selectTurn(store, "fr-1", "90003")).status).toBe("ok");
   expect(store.get("fr-1")?.selection?.trainNumber).toBe("90003");
+  expect(toolResultOf(await selectTurn(store, "fr-1", "90008")).status).toBe("ok");
+  expect(store.get("fr-1")?.selection?.trainNumber).toBe("90008");
 });
 
-it("a train beyond the first 8 results (position 25) is selectable", async () => {
+it("a valid train at position 25 is selectable (the live 12030 case)", async () => {
   const store = new ConversationStore();
-  await searchTurn(store, "fr-2", "2026-10-12");
+  await searchTurn(store, "fr-2");
   const ev = await selectTurn(store, "fr-2", "90025");
-  const tr = toolResultOf(ev);
-  expect(tr.status).toBe("ok");
+  expect(toolResultOf(ev).status).toBe("ok");
   const form = ev.find((e) => e.type === "passenger_form") as Extract<TurnEvent, { type: "passenger_form" }>;
   expect(form.selection?.trainNumber).toBe("90025");
   expect(form.selection?.classes).toContain("CC");
   expect(store.get("fr-2")?.selection?.trainNumber).toBe("90025");
 });
 
+it("a valid train at position 40 is selectable", async () => {
+  const store = new ConversationStore();
+  await searchTurn(store, "fr-3");
+  expect(toolResultOf(await selectTurn(store, "fr-3", "90040")).status).toBe("ok");
+  expect(store.get("fr-3")?.selection?.trainNumber).toBe("90040");
+});
+
+it("valid trains at position 100 and beyond are selectable", async () => {
+  const store = new ConversationStore();
+  await searchTurn(store, "fr-4");
+  expect(toolResultOf(await selectTurn(store, "fr-4", "90100")).status).toBe("ok"); // position 100
+  expect(toolResultOf(await selectTurn(store, "fr-4", "90120")).status).toBe("ok"); // last row
+  expect(store.get("fr-4")?.selection?.trainNumber).toBe("90120");
+});
+
+/* ---------- same authoritative set: cards <-> selection ---------- */
+
+it("UI cards and chat selection validate against the same current result set (card at position 25)", async () => {
+  const store = new ConversationStore();
+  const ev = await searchTurn(store, "fr-5");
+  const message = ev.find((e) => e.type === "message") as Extract<TurnEvent, { type: "message" }>;
+  expect(message.cards).toHaveLength(ROW_COUNT); // cards render the FULL provider list
+  // Tapping the card at position 25 sends exactly that card's train number:
+  const tapped = message.cards![24].trainNumber!;
+  expect(tapped).toBe("90025");
+  expect(toolResultOf(await selectTurn(store, "fr-5", tapped)).status).toBe("ok");
+  expect(store.get("fr-5")?.selection?.trainNumber).toBe("90025");
+});
+
+/* ---------- identity safety: absent / ambiguous / contract boundary ---------- */
+
 it("a train absent from the current full results is rejected; nothing selected", async () => {
   const store = new ConversationStore();
-  await searchTurn(store, "fr-3", "2026-10-12");
-  const ev = await selectTurn(store, "fr-3", "99999");
-  expect(toolResultOf(ev).status).toBe("error");
-  expect(store.get("fr-3")?.selection).toBeUndefined();
+  await searchTurn(store, "fr-6");
+  expect(toolResultOf(await selectTurn(store, "fr-6", "99999")).status).toBe("error");
+  expect(store.get("fr-6")?.selection).toBeUndefined();
 });
 
-it("a train only present in a superseded search is rejected", async () => {
+it("ambiguous identity: a numeric PREFIX never silently selects a longer number", async () => {
   const store = new ConversationStore();
-  await searchTurn(store, "fr-4", "2026-10-12");
-  await searchTurn(store, "fr-4", "2026-10-13"); // date change supersedes the 30-row search
-  const conv = store.get("fr-4")!;
+  await searchTurn(store, "fr-7");
+  // "9000" is a 4-digit prefix of 90001…90009 — it must NOT select any of them.
+  const ev = await selectTurn(store, "fr-7", "9000");
+  expect(toolResultOf(ev).status).toBe("error");
+  expect(store.get("fr-7")?.selection).toBeUndefined();
+});
+
+it("name-as-trainNumber is rejected by the existing contract — no silent wrong selection (documented boundary)", async () => {
+  const store = new ConversationStore();
+  await searchTurn(store, "fr-8");
+  // The SELECT_TRAIN contract accepts only a 4–6 digit number. If the LLM
+  // (wrongly) forwards a NAME, the schema rejects it and nothing is selected —
+  // the assistant then asks the user for the number instead of guessing.
+  const ev = await selectTurn(store, "fr-8", "Full List Express 25");
+  const tr = toolResultOf(ev);
+  expect(tr.status).toBe("invalid_arguments"); // existing schema contract rejects non-numbers
+  expect(store.get("fr-8")?.selection).toBeUndefined();
+});
+
+/* ---------- staleness: superseded / route / session ---------- */
+
+it("a train present only in a superseded search (date change) is rejected", async () => {
+  const store = new ConversationStore();
+  await searchTurn(store, "fr-9", "2026-10-12");
+  await searchTurn(store, "fr-9", "2026-10-13"); // date change supersedes the 120-row search
+  const conv = store.get("fr-9")!;
   expect(conv.results[0].supersededBy).toBeDefined();
-  const ev = await selectTurn(store, "fr-4", "90025"); // exists ONLY in the superseded ref
+  expect(toolResultOf(await selectTurn(store, "fr-9", "90025")).status).toBe("error");
+  expect(store.get("fr-9")?.selection).toBeUndefined();
+});
+
+it("a train present only under a superseded route is rejected", async () => {
+  const store = new ConversationStore();
+  await searchTurn(store, "fr-10", "2026-10-12", "NDLS");
+  await searchTurn(store, "fr-10", "2026-10-12", "ASR"); // route change supersedes
+  const conv = store.get("fr-10")!;
+  expect(conv.results[0].supersededBy).toBeDefined();
+  expect(toolResultOf(await selectTurn(store, "fr-10", "90025")).status).toBe("error");
+  expect(toolResultOf(await selectTurn(store, "fr-10", "92001")).status).toBe("ok"); // current route's train works
+  expect(store.get("fr-10")?.selection?.trainNumber).toBe("92001");
+});
+
+it("SELECT_TRAIN without any search in the session is rejected (session mismatch)", async () => {
+  const store = new ConversationStore();
+  const ev = await selectTurn(store, "fr-11", "90025");
   expect(toolResultOf(ev).status).toBe("error");
-  expect(store.get("fr-4")?.selection).toBeUndefined();
+  expect(store.get("fr-11")?.selection).toBeUndefined();
 });
 
-it("the LLM's rendered conversational context stays capped at 8 items", async () => {
+/* ---------- context cap & non-mutation ---------- */
+
+it("the LLM's rendered conversational context stays capped at 8 summaries", async () => {
   const store = new ConversationStore();
-  await searchTurn(store, "fr-5", "2026-10-12");
-  const block = store.buildContextBlock(store.get("fr-5")!, "tNext", "2026-10-10");
-  expect(block).toContain("8) 90008 "); // 8th item rendered
+  await searchTurn(store, "fr-12");
+  const block = store.buildContextBlock(store.get("fr-12")!, "tNext", "2026-10-10");
+  expect(block).toContain("8) 90008 "); // 8th summary rendered
   expect(block).not.toContain("90009 "); // 9th NOT rendered
-  expect(block).toContain("(+22 more in current results"); // honest truncation marker
-  // but the validation set itself is complete
-  expect(store.get("fr-5")!.results[0].items).toHaveLength(30);
+  expect(block).toContain(`(+${ROW_COUNT - 8} more in current results`); // honest marker
 });
 
-it("UI cards and chat/tool selection use the same current authoritative result set", async () => {
+it("building the compact LLM context never mutates or truncates the authoritative list", async () => {
   const store = new ConversationStore();
-  const ev = await searchTurn(store, "fr-6", "2026-10-12");
-  const message = ev.find((e) => e.type === "message") as Extract<TurnEvent, { type: "message" }>;
-  expect(message.cards).toHaveLength(30); // cards render the FULL provider list
-  const sel = await selectTurn(store, "fr-6", "90025");
-  expect(toolResultOf(sel).status).toBe("ok");
-  expect(message.cards![24].trainNumber).toBe("90025"); // same row the user saw
-  expect(store.get("fr-6")?.selection?.trainNumber).toBe("90025");
+  await searchTurn(store, "fr-13");
+  const conv = store.get("fr-13")!;
+  const before = conv.results[0].items!.length;
+  store.buildContextBlock(conv, "tNext", "2026-10-10"); // compaction for the LLM…
+  store.buildContextBlock(conv, "tNext2", "2026-10-10");
+  expect(store.get("fr-13")!.results[0].items).toHaveLength(before); // …does not shrink the store
+  expect(store.get("fr-13")!.results[0].items).toHaveLength(ROW_COUNT);
+  // and the beyond-8 train is still selectable AFTER repeated compaction
+  expect(toolResultOf(await selectTurn(store, "fr-13", "90120")).status).toBe("ok");
 });

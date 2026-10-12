@@ -255,7 +255,15 @@ it("L7: oversized provider response is compacted — context payload stays bound
   const conv = store.getOrCreate("big-conv");
   const refs = conv.results;
   expect(refs.length).toBeLessThanOrEqual(8); // MAX_RESULT_REFS
-  for (const r of refs) expect(r.items?.length ?? 0).toBeLessThanOrEqual(150); // selection-set bound (MAX_SELECTION_ITEMS); conversational rendering is capped at 8
+  // The FULL authoritative list is retained for selection validation (never
+  // truncated — no arbitrary backend cap), but per-row labels stay compact…
+  expect(refs[0].items).toHaveLength(5000);
+  // …and the LLM's rendered context stays capped at 8 items, so an oversized
+  // provider payload can never bloat the prompt.
+  const block = store.buildContextBlock(conv, "tNext", "2026-10-10");
+  expect(block).toContain("8) 10007 ");
+  expect(block).not.toContain("10008 ");
+  expect(block).toContain("(+4992 more in current results");
 });
 
 it("L8: primary AND fallback both failing — honest error, no fabricated railway reply", async () => {

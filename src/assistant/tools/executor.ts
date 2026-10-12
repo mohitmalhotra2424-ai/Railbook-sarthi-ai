@@ -166,7 +166,9 @@ export async function executeTool(
     const searchRefs = conv.results.filter((r) => r.tool === "SEARCH_TRAINS" && !r.supersededBy && r.items?.length);
     let hit: { item: { index: number; label: string; classes?: string[] }; ref: (typeof searchRefs)[number] } | null = null;
     for (const ref of [...searchRefs].reverse()) {
-      const item = ref.items!.find((i) => i.label.startsWith(a.trainNumber));
+      // Match the train number as a FULL token — a prefix (e.g. "1203") must
+      // never silently select "12030 …" when identities could be ambiguous.
+      const item = ref.items!.find((i) => i.label === a.trainNumber || i.label.startsWith(`${a.trainNumber} `));
       if (item) {
         hit = { item, ref };
         break;
