@@ -76,14 +76,24 @@ const t5b = await turn(cid, "Male");
 const p5b = t5b.forms.at(-1)?.passengers?.[0];
 check("L5b gender collected — required field set complete (name+age+gender)", !t5b.err && p5b?.gender === "male" && p5b?.name === "Rahul Sharma", `pax=${JSON.stringify(p5b ?? {})} tools=${t5b.tools.join(",")} text=${t5b.text.slice(0, 120)}`);
 
+// P31/P33 (owner rule): berth preference is mandatory for review — collected
+// one-by-one like every other field, still a request-only unverified value.
+const t5c = await turn(cid, "Berth preference lower hai.");
+const p5c = t5c.forms.at(-1)?.passengers?.[0];
+check(
+  "L5c berth collected — every required field saved one-by-one",
+  !t5c.err && p5c?.berth === "lower" && p5c?.name === "Rahul Sharma" && p5c?.age === 28 && p5c?.gender === "male",
+  `pax=${JSON.stringify(p5c ?? {})}`,
+);
+
 // P30: final booking-review readiness — authoritative form event must carry the
 // full journey (train/date/class) + every required passenger field saved.
-const revSel = t5b.forms.at(-1)?.selection;
+const revSel = t5c.forms.at(-1)?.selection;
 check(
-  "L8 final review data complete (train+date+class+all required pax saved)",
-  !t5b.err && Boolean(revSel?.trainNumber) && Boolean(revSel?.classCode) && Boolean(revSel?.journeyDate) &&
-    Boolean(p5b?.name) && p5b?.age !== undefined && Boolean(p5b?.gender),
-  `sel=${revSel?.trainNumber ?? "-"}/${revSel?.classCode ?? "-"}/${revSel?.journeyDate ?? "-"} paxComplete=${Boolean(p5b?.name && p5b?.age !== undefined && p5b?.gender)}`,
+  "L8 final review data complete (train+date+class+ALL required pax fields incl. berth)",
+  !t5c.err && Boolean(revSel?.trainNumber) && Boolean(revSel?.classCode) && Boolean(revSel?.journeyDate) &&
+    Boolean(p5c?.name) && p5c?.age !== undefined && Boolean(p5c?.gender) && Boolean(p5c?.berth),
+  `sel=${revSel?.trainNumber ?? "-"}/${revSel?.classCode ?? "-"}/${revSel?.journeyDate ?? "-"} paxComplete=${Boolean(p5c?.name && p5c?.age !== undefined && p5c?.gender && p5c?.berth)}`,
 );
 
 const t6 = await turn(cid, "Maine naam galat bola — Rahul nahi, Rohit Sharma hai.");

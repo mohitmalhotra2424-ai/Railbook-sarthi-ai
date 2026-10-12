@@ -5,6 +5,44 @@ import { validatePassengerField } from "@/assistant/passengers/validate";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * GET /api/passenger?conversationId=… — read-only snapshot for the review
+ * page: authoritative selection, passengers, readiness, review, and the
+ * latest non-superseded provider fare/availability for the selection
+ * (honest freshness included; nothing invented).
+ */
+export async function GET(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const conversationId = url.searchParams.get("conversationId") ?? "";
+  if (!CONVERSATION_ID_RX.test(conversationId)) return badRequest("conversationId is required.");
+  const conv = conversationStore.get(conversationId);
+  if (!conv) {
+    return jsonResponse({ ok: true, selection: null, passengers: [], readiness: null, review: null, fare: null, availability: null });
+  }
+  const sel = conv.selection ?? null;
+  const latest = (tool: string, match: (r: { classCode?: string }) => boolean) => {
+    const refs = conv.results.filter(
+      (r) => r.tool === tool && !r.supersededBy && r.trainNumber === sel?.trainNumber && match(r),
+    );
+    return refs.length ? refs[refs.length - 1] : undefined;
+  };
+  const fareRef = sel ? latest("GET_FARE", (r) => (r.classCode && sel.classCode ? r.classCode === sel.classCode : true)) : undefined;
+  const availRef = sel ? latest("CHECK_AVAILABILITY", () => true) : undefined;
+  return jsonResponse({
+    ok: true,
+    selection: sel,
+    passengers: conv.passengers,
+    readiness: evaluateReadiness(conv),
+    review: conv.review ?? null,
+    fare: fareRef?.fare
+      ? { ...fareRef.fare, retrievedAt: fareRef.retrievedAt ?? null, freshness: fareRef.freshness ?? "unknown" }
+      : null,
+    availability: availRef?.availability
+      ? { classes: availRef.availability, retrievedAt: availRef.retrievedAt ?? null, freshness: availRef.freshness ?? "unknown" }
+      : null,
+  });
+}
+
 const CONVERSATION_ID_RX = /^[a-zA-Z0-9_-]{8,64}$/;
 
 /**

@@ -9,6 +9,7 @@ import {
   type SelectionState,
 } from "@/assistant/context/store";
 import type { ReadinessResult } from "@/assistant/booking/preparation";
+import Link from "next/link";
 import { CheckIcon, WarnIcon } from "./icons";
 
 export interface PassengerFormState {
@@ -289,6 +290,15 @@ export function PassengerFormPanel({
         <p className="text-[9px] text-navy-500">
           Food preference: not supported by any authorised integration — field omitted. Nothing invented.
         </p>
+        {conversationId && (
+          <Link
+            href={`/review?c=${encodeURIComponent(conversationId)}`}
+            data-testid="open-review-page"
+            className="mt-2 inline-block rounded-full border border-navy-200 bg-white px-3 py-1.5 text-[10px] font-bold text-navy-800 transition hover:border-navy-400"
+          >
+            Full review page par dekhein →
+          </Link>
+        )}
         {currentComplete(passengers[passengers.length - 1] ?? {}) && passengers.length < MAX_PASSENGERS && (
           <button
             type="button"

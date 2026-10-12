@@ -34,6 +34,10 @@ export interface ResultRef {
   /** Compact rows so the LLM can resolve "doosri wali"-style references. */
   items?: { index: number; label: string; classes?: string[] }[];
   summary?: string;
+  /** Prompt 33: provider-returned fare (only when a GET_FARE result was ok). */
+  fare?: { classCode: string; totalFare: number; currency: string };
+  /** Prompt 33: provider-returned per-class availability (CHECK_AVAILABILITY ok). */
+  availability?: { classCode: string; status: string }[];
   supersededBy?: string;
   supersededReason?: string;
 }
@@ -187,6 +191,8 @@ export class ConversationStore {
       trainNumber: a.trainNumber ?? a.pnr,
       items: compactItems(result.data),
       summary: compactSummary(result),
+      fare: compactFare(result.data),
+      availability: compactAvailability(result.data),
     };
 
     // Invalidation: a new search/availability run for a different date or
@@ -458,6 +464,24 @@ function compactItems(data: unknown): { index: number; label: string }[] | undef
       : undefined;
     return { index: i + 1, label, ...(classes?.length ? { classes } : {}) };
   });
+}
+
+/** Only real provider data shaped by the domain schemas — never invented. */
+function compactFare(data: unknown): { classCode: string; totalFare: number; currency: string } | undefined {
+  const d = data as { classCode?: unknown; totalFare?: unknown; currency?: unknown } | null;
+  if (!d || typeof d !== "object") return undefined;
+  if (typeof d.classCode !== "string" || typeof d.totalFare !== "number") return undefined;
+  return { classCode: d.classCode, totalFare: d.totalFare, currency: typeof d.currency === "string" ? d.currency : "INR" };
+}
+
+function compactAvailability(data: unknown): { classCode: string; status: string }[] | undefined {
+  const d = data as { classes?: unknown } | null;
+  if (!d || !Array.isArray(d.classes)) return undefined;
+  const rows = d.classes
+    .filter((c): c is { classCode?: unknown; status?: unknown } => typeof c === "object" && c !== null)
+    .filter((c) => typeof c.classCode === "string" && typeof c.status === "string")
+    .map((c) => ({ classCode: c.classCode as string, status: c.status as string }));
+  return rows.length ? rows.slice(0, 8) : undefined;
 }
 
 function compactSummary(result: ToolResult): string {
