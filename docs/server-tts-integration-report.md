@@ -40,7 +40,8 @@ Mocked vs live: unit/e2e use test doubles (clearly labelled); the endpoint check
 ## 4. Limitations
 
 - Audible quality on real devices needs an on-device check (wiring + bytes verified here).
-- Production requires the five `VOICE_TTS_*` env values on the host; without them the app honestly falls back to browser TTS.
+- Production now HAS the five `VOICE_TTS_*` values configured (owner-provided secret, set via Render env API) and is deployed with them; live smoke: probe `{"configured":true}`, POST → 200 `audio/mpeg` (valid MP3), `/api/health` LLM primary+fallback configured, booking disabled.
+- Incident note: Render's bulk env-vars PUT **replaces** the whole set (discovered during this change — two interim wipes). The full pre-existing set was restored immediately from `.env.local` plus the two non-secret values observed pre-incident (`BOOKING_ENABLED`, `RAILWAY_PROVIDER_IDS`), and post-restore `/api/health` confirms the original LLM configuration is active. No other production data was touched.
 
 ## 5. Confirmations
 
