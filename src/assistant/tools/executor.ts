@@ -172,7 +172,7 @@ export async function executeTool(
     if (!srcRef) {
       return {
         ...baseResult(tool, meta, "error"),
-        note: "There are no current train search results to filter. Run SEARCH_TRAINS for the user's route/date first.",
+        note: "There are no current train search results to filter — the filter did NOT run and NOTHING was checked. Run SEARCH_TRAINS for the user's route/date first; if you then show those results they are RAW and UNFILTERED — never describe them as confirmed, available or filtered.",
       };
     }
     const toMin = (t: string) => {
@@ -229,6 +229,9 @@ export async function executeTool(
     // Unknown/failed/rate-limited/stale checks are NEVER treated as available
     // or unavailable — they are counted and disclosed honestly.
     let availSummary = "";
+    // Prompt 41: structured, prose-free outcome of the availability operation
+    // (guard evidence) — set only when the checks actually ran.
+    let availOutcome: ToolResult["availabilityFilter"] | undefined;
     if (a.availableOnly) {
       const cls = (a.classCode ?? conv.selection?.classCode ?? conv.journey.classCode ?? "").trim().toUpperCase();
       if (!cls) {
@@ -371,6 +374,14 @@ export async function executeTool(
         pieces.push(`Availability could not be verified for any of the ${total} relevant trains (provider errors, rate limits or timeouts) — nothing is confirmed either way. Do NOT tell the user that no train is available.`);
       }
       availSummary = ` ${pieces.join(" ")}`;
+      availOutcome = {
+        classCode: cls,
+        checked: nAvail + nUnavail + nUnknown,
+        available: nAvail,
+        unavailable: nUnavail,
+        unknown: nUnknown,
+        complete: nUnknown === 0,
+      };
     }
     // Fares: only from current, non-superseded GET_FARE results.
     let faresKnown = 0;
@@ -446,6 +457,8 @@ export async function executeTool(
       note,
       data,
       journeyDate: srcRef.journeyDate,
+      // Prompt 41: the claim guard validates wording against THESE counts.
+      ...(availOutcome ? { availabilityFilter: availOutcome } : {}),
     };
   }
 

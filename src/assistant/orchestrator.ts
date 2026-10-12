@@ -10,6 +10,7 @@ import {
 import { conversationStore, ConversationStore, REQUIRED_PASSENGER_FIELDS } from "./context/store";
 import { evaluateReadiness } from "./booking/preparation";
 import { guardSaveClaims } from "./passengers/save-claim-guard";
+import { guardAvailabilityClaims } from "./availability-claim-guard";
 import { SYSTEM_PROMPT } from "./prompts";
 import { executeTool } from "./tools/executor";
 import { TOOL_DEFINITIONS } from "./tools/schemas";
@@ -312,6 +313,18 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
           blockedFields: guarded.blockedClaims.map((b) => b.field),
         });
       }
+      // Prompt 41 — availability/filter claim safety: wording must match the
+      // structured outcomes of THIS turn. Primary and fallback models pass
+      // through the identical guard, and text and voice consume the single
+      // message event below, so both channels stay truthful.
+      const avGuarded = guardAvailabilityClaims({ text: guarded.text, turnResults });
+      if (avGuarded.adjusted) {
+        logger.warn("availability-claim guard replaced an unsupported availability claim", {
+          conversationId: conv.id,
+          turnId,
+          reasons: avGuarded.blockedClaims.map((b) => b.reason),
+        });
+      }
       // Prompt 28 — bounded recovery trigger. Conditions (all required):
       //  1. the P26 guard blocked an unsupported save claim this turn;
       //  2. the claimed field is still missing in authoritative current state;
@@ -336,7 +349,7 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
       if (recoverable) {
         recoveryUsed = true;
         recoveryFallback = {
-          text: guarded.text,
+          text: avGuarded.text,
           model: usedEndpoint.cfg.model,
           viaFallback: usedEndpoint.viaFallback,
         };
@@ -353,10 +366,10 @@ export async function* runTurn(params: RunTurnParams): AsyncGenerator<TurnEvent>
         });
         continue;
       }
-      store.appendAssistant(conv.id, guarded.text);
+      store.appendAssistant(conv.id, avGuarded.text);
       yield {
         type: "message",
-        text: guarded.text,
+        text: avGuarded.text,
         model: usedEndpoint.cfg.model,
         viaFallback: usedEndpoint.viaFallback,
         cards: deriveCards(turnResults),

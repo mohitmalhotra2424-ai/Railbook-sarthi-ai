@@ -40,6 +40,20 @@ export interface ToolResult {
   classCode?: string;
   data?: unknown;
   errors?: { code: string; message: string; retryable: boolean }[];
+  /**
+   * Prompt 41: structured outcome of an availability-filter operation, set
+   * ONLY when FILTER_TRAINS actually ran live availability checks (status ok
+   * + availableOnly). Authoritative evidence for claim validation — counts,
+   * never prose. `complete` means every relevant train was verified.
+   */
+  availabilityFilter?: {
+    classCode: string;
+    checked: number;
+    available: number;
+    unavailable: number;
+    unknown: number;
+    complete: boolean;
+  };
 }
 
 /**
