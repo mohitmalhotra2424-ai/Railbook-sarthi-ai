@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBrowserCapability } from "./useBrowserCapability";
-import { detectTtsLanguage, speakableText } from "./lang";
+import { detectTtsLanguage, speakableText, spokenSentences } from "./lang";
 
 /**
  * Text-to-speech with a server-first path (Prompt 34 addendum): the exact
  * assistant response is synthesized server-side via the configured
  * OpenAI-compatible endpoint and played as returned audio. If the server
  * path is unavailable (not configured, upstream error, timeout, invalid
- * audio) we fall back to the browser's speechSynthesis. We speak ONLY the
+ * audio) we fall back to the browser's speechSynthesis, spoken in
+ * sentence-sized chunks for natural segmentation (Prompt 35). We speak ONLY the
  * actual assistant response (cleaned of markdown), never a new answer, and
  * never autoplay: playback starts from an explicit user action (speaker
  * button or a user-enabled conversation mode). A generation counter makes
@@ -115,25 +116,45 @@ export function useSpeak(opts: { onEnd?: () => void } = {}): SpeakApi {
     cleanupPlayback();
   }, [cleanupPlayback]);
 
-  /** Browser fallback (unchanged behaviour, language-matched voice). */
+  /** Browser fallback: same language-matched voice as before, but the text is
+   *  spoken in sentence-sized chunks queued sequentially, so segmentation is
+   *  natural and an interrupt/stop cannot leave orphaned audio. Every handler
+   *  is generation-guarded: an obsolete turn is discarded mid-chain. */
   const speakLocal = useCallback((id: string, clean: string, gen: number) => {
     if (typeof window === "undefined" || typeof window.speechSynthesis?.speak !== "function") {
       setError("Audio playback available nahi hai.");
       return;
     }
     const synth = window.speechSynthesis;
-    const doSpeak = () => {
-      pendingTimerRef.current = null;
+    const chunks = spokenSentences(clean);
+    const lang = detectTtsLanguage(clean);
+    const prefix = lang.split("-")[0];
+    const voice =
+      voicesRef.current.find((v) => v.lang === lang) ??
+      voicesRef.current.find((v) => v.lang.startsWith(prefix)) ??
+      voicesRef.current.find((v) => v.lang.startsWith("hi")) ??
+      voicesRef.current.find((v) => v.lang.startsWith("en"));
+
+    const fail = () => {
+      if (genRef.current !== gen) return;
+      speakingIdRef.current = null;
+      setSpeakingId(null);
+      setError("Audio playback fail ho gaya. Reply padh sakte hain.");
+    };
+
+    const speakFrom = (i: number) => {
+      if (genRef.current !== gen) return; // obsolete turn — no leftover audio
+      if (i >= chunks.length) {
+        if (speakingIdRef.current === id) {
+          speakingIdRef.current = null;
+          setSpeakingId(null);
+          onEndRef.current?.();
+        }
+        return;
+      }
       try {
-        const utterance = new SpeechSynthesisUtterance(clean);
-        const lang = detectTtsLanguage(clean);
+        const utterance = new SpeechSynthesisUtterance(chunks[i]);
         utterance.lang = lang;
-        const prefix = lang.split("-")[0];
-        const voice =
-          voicesRef.current.find((v) => v.lang === lang) ??
-          voicesRef.current.find((v) => v.lang.startsWith(prefix)) ??
-          voicesRef.current.find((v) => v.lang.startsWith("hi")) ??
-          voicesRef.current.find((v) => v.lang.startsWith("en"));
         if (voice) utterance.voice = voice;
         utterance.onstart = () => {
           if (genRef.current !== gen) return;
@@ -142,35 +163,30 @@ export function useSpeak(opts: { onEnd?: () => void } = {}): SpeakApi {
           setError(null);
         };
         utterance.onend = () => {
-          if (genRef.current === gen && speakingIdRef.current === id) {
-            speakingIdRef.current = null;
-            setSpeakingId(null);
-            onEndRef.current?.();
-          }
+          if (genRef.current !== gen) return;
+          speakFrom(i + 1); // next sentence in order — never duplicates
         };
-        utterance.onerror = () => {
-          if (genRef.current === gen) {
-            speakingIdRef.current = null;
-            setSpeakingId(null);
-            setError("Audio playback fail ho gaya. Reply padh sakte hain.");
-          }
-        };
+        utterance.onerror = () => fail(); // stop the rest honestly
         synth.speak(utterance);
       } catch {
-        setSpeakingId(null);
-        setError("Audio playback fail ho gaya. Reply padh sakte hain.");
+        fail();
       }
+    };
+
+    const start = () => {
+      pendingTimerRef.current = null;
+      speakFrom(0);
     };
     try {
       if (synth.speaking || synth.pending) {
         synth.cancel();
-        pendingTimerRef.current = setTimeout(doSpeak, 120);
+        // Chrome swallows speak() issued immediately after cancel()
+        pendingTimerRef.current = setTimeout(start, 120);
       } else {
-        doSpeak();
+        start();
       }
     } catch {
-      setSpeakingId(null);
-      setError("Audio playback fail ho gaya. Reply padh sakte hain.");
+      fail();
     }
   }, []);
 

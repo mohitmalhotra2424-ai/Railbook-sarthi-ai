@@ -14,10 +14,10 @@ import { PassengerFormPanel, type PassengerFormState } from "./PassengerFormPane
 import { ResultBlocks } from "./ResultBlocks";
 import type { ResultBlock } from "@/assistant/orchestrator";
 import { BrandMark, ArrowDownIcon, CheckIcon, MicIcon, PlusIcon, SendIcon, SpeakerIcon, StopIcon, WarnIcon } from "./icons";
-import { availabilityKind, KIND_LABEL } from "./results/status";
 import Link from "next/link";
 import { useVoiceInput } from "./voice/useVoiceInput";
 import { useSpeak } from "./voice/useSpeak";
+import { speechSummary } from "./voice/speechSummary";
 
 interface ToolChip {
   correlationId: string;
@@ -75,39 +75,6 @@ function chipStyle(chip: ToolChip): string {
     default:
       return "border-alert-500/30 bg-alert-500/10 text-alert-500";
   }
-}
-
-/** Concise spoken summary built ONLY from verified structured data in the
- *  message (cards/blocks). Never invents availability, fare or status. */
-function speechSummary(m: ChatMsg): string {
-  const bits: string[] = [];
-  if (m.text) bits.push(m.text);
-  for (const c of m.cards ?? []) {
-    const av = (c.availability ?? [])
-      .map((a) => `${a.classCode} ${KIND_LABEL[availabilityKind(a.status)]}`)
-      .join(", ");
-    bits.push(`${c.trainNumber} mein ${av || "abhi availability verify nahi hui"}.`);
-  }
-  for (const b of m.blocks ?? []) {
-    if (b.kind === "availability") {
-      bits.push(
-        `${b.data.trainNumber}: ` +
-          b.data.classes.map((x) => `${x.classCode} ${KIND_LABEL[availabilityKind(x.status)]}`).join(", ") +
-          ".",
-      );
-    } else if (b.kind === "fare") {
-      bits.push(`${b.data.trainNumber} ${b.data.classCode} fare ${b.data.totalFare} rupees hai.`);
-    } else if (b.kind === "live") {
-      bits.push(
-        b.data.running === null
-          ? `${b.data.trainNumber} ki live position verify nahi hui.`
-          : `${b.data.trainNumber} ${
-              b.data.running ? "running hai" : "running nahi hai"
-            }, last report ${b.data.lastStation?.name ?? "unknown"}.`,
-      );
-    }
-  }
-  return bits.join(" ").slice(0, 1200);
 }
 
 function ToolChipView({ chip }: { chip: ToolChip }) {
@@ -285,6 +252,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
     async (raw: string) => {
       const text = raw.trim();
       if (!text || busy || sendingRef.current) return; // same-tick double-send guard
+      speak.stop(); // Prompt 35: typing/sending interrupts assistant playback
       sendingRef.current = true;
       setInput("");
       setBusy(true);
@@ -447,7 +415,7 @@ export function ChatClient({ initialMessage }: { initialMessage?: string }) {
         sendingRef.current = false;
       }
     },
-    [busy, patchMsg, restoreTextOnFailure],
+    [busy, patchMsg, restoreTextOnFailure, speak],
   );
 
   function onSubmit(e: FormEvent) {
