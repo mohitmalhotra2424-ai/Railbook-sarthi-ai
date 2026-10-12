@@ -1,6 +1,6 @@
 import { badRequest, jsonResponse } from "@/lib/http";
 import { conversationStore } from "@/assistant/context/store";
-import { evaluateReadiness, IRCTC_HANDOFF_READY } from "@/assistant/booking/preparation";
+import { evaluateReadiness, IRCTC_HANDOFF_READY, parseTimesFromLabel } from "@/assistant/booking/preparation";
 import { validatePassengerField } from "@/assistant/passengers/validate";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export async function GET(request: Request): Promise<Response> {
   if (!CONVERSATION_ID_RX.test(conversationId)) return badRequest("conversationId is required.");
   const conv = conversationStore.get(conversationId);
   if (!conv) {
-    return jsonResponse({ ok: true, selection: null, passengers: [], readiness: null, review: null, fare: null, availability: null });
+    return jsonResponse({ ok: true, selection: null, passengers: [], readiness: null, review: null, fare: null, availability: null, times: null });
   }
   const sel = conv.selection ?? null;
   const latest = (tool: string, match: (r: { classCode?: string }) => boolean) => {
@@ -27,6 +27,13 @@ export async function GET(request: Request): Promise<Response> {
     return refs.length ? refs[refs.length - 1] : undefined;
   };
   const fareRef = sel ? latest("GET_FARE", (r) => (r.classCode && sel.classCode ? r.classCode === sel.classCode : true)) : undefined;
+  // Prompt 33: provider-reported dep/arr times for the selected train, read
+  // from the current non-superseded SEARCH_TRAINS result row (never invented).
+  const searchRefs = conv.results.filter((r) => r.tool === "SEARCH_TRAINS" && !r.supersededBy && r.items?.length);
+  const selItem = sel
+    ? [...searchRefs].reverse().flatMap((r) => r.items!).find((i) => i.label === sel.trainNumber || i.label.startsWith(`${sel.trainNumber} `))
+    : undefined;
+  const times = selItem ? parseTimesFromLabel(selItem.label) : null;
   const availRef = sel ? latest("CHECK_AVAILABILITY", () => true) : undefined;
   return jsonResponse({
     ok: true,
@@ -40,6 +47,7 @@ export async function GET(request: Request): Promise<Response> {
     availability: availRef?.availability
       ? { classes: availRef.availability, retrievedAt: availRef.retrievedAt ?? null, freshness: availRef.freshness ?? "unknown" }
       : null,
+    times,
   });
 }
 

@@ -112,6 +112,7 @@ test("review page shows authoritative train/stations/class/fare/availability/pas
           review: reviewState(),
           fare: { classCode: "3A", totalFare: 545, currency: "INR", retrievedAt: "2026-10-12T05:00:00.000Z", freshness: "fresh" },
           availability: { classes: [{ classCode: "3A", status: "RLWL2/WL2" }], retrievedAt: "2026-10-12T05:00:00.000Z", freshness: "fresh" },
+          times: { departure: "06:15", arrival: "10:30" },
         }),
       });
     }
@@ -134,9 +135,14 @@ test("review page shows authoritative train/stations/class/fare/availability/pas
   await expect(page.getByTestId("review-fare")).toContainText("₹545");
   await expect(page.getByTestId("review-availability")).toContainText("RLWL2/WL2");
   await expect(page.getByTestId("review-page-pax-1")).toContainText("Rahul Sharma");
+  await expect(page.getByTestId("review-pax-count")).toContainText("1 passenger");
+  await expect(page.getByTestId("review-times")).toContainText("Dep 06:15 · Arr 10:30");
+  await expect(page.getByTestId("review-status")).toContainText("Ready for review");
+  await expect(page.getByTestId("proceed-irctc")).toBeEnabled();
 
   await page.getByTestId("proceed-irctc").click();
   await expect(page.getByTestId("handoff-ready")).toContainText("IRCTC_HANDOFF_READY");
+  await expect(page.getByTestId("review-status")).toContainText("Preparation complete");
   await expect(page.getByTestId("handoff-ready")).toContainText("not enabled");
   expect(reviewed).toBe(true);
   expect(confirmed).toBe(true);
@@ -160,11 +166,15 @@ test("review page blocks Proceed while required fields are missing and names the
         review: null,
         fare: null,
         availability: null,
+        times: null,
       }),
     }),
   );
   await page.goto("/review?c=p33-fixture-conv-1");
   await expect(page.getByTestId("review-missing")).toContainText("passenger 1: berth");
   await expect(page.getByTestId("review-fare")).toContainText("Fare verify nahi hui");
-  await expect(page.getByTestId("proceed-irctc")).toHaveCount(0);
+  await expect(page.getByTestId("review-status")).toContainText("Review incomplete");
+  await expect(page.getByTestId("review-pax-count")).toContainText("1 passenger");
+  await expect(page.getByTestId("review-times")).toHaveCount(0); // nothing invented when provider row has no times
+  await expect(page.getByTestId("proceed-irctc")).toBeDisabled(); // blocked while required fields are missing
 });

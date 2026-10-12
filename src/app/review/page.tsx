@@ -28,6 +28,7 @@ interface Snapshot {
   review: ReviewState | null;
   fare: { classCode: string; totalFare: number; currency: string; retrievedAt: string | null; freshness: string } | null;
   availability: { classes: { classCode: string; status: string }[]; retrievedAt: string | null; freshness: string } | null;
+  times: { departure: string; arrival: string | null } | null;
 }
 
 export default function ReviewPage() {
@@ -122,6 +123,25 @@ export default function ReviewPage() {
 
         {snap && sel && (
           <>
+            <p
+              data-testid="review-status"
+              aria-live="polite"
+              className={`rounded-full px-3.5 py-1.5 text-[11px] font-bold w-fit ${
+                confirmed
+                  ? "bg-signal-500/15 text-signal-700"
+                  : ready
+                    ? "bg-navy-900/10 text-navy-800"
+                    : "bg-saffron-500/15 text-saffron-600"
+              }`}
+            >
+              {confirmed
+                ? "Preparation complete — booking provider unavailable"
+                : snap.review?.status === "awaiting_confirmation"
+                  ? "Awaiting explicit approval"
+                  : ready
+                    ? "Ready for review"
+                    : "Review incomplete"}
+            </p>
             {/* Journey + train card */}
             <section className="surface-shadow-soft animate-rise overflow-hidden rounded-3xl border border-cream-300 bg-white">
               <div className="px-5 py-4">
@@ -130,6 +150,9 @@ export default function ReviewPage() {
                   {sel.from ?? "—"} <span aria-hidden className="text-navy-400">→</span> {sel.to ?? "—"}
                 </p>
                 <p className="mt-0.5 text-[12px] text-navy-600">{sel.journeyDate ?? "date not set"}</p>
+                <p className="mt-0.5 text-[12px] text-navy-600" data-testid="review-pax-count">
+                  {snap.passengers.length} passenger{snap.passengers.length === 1 ? "" : "s"}
+                </p>
               </div>
               <div className="border-t border-cream-200 px-5 py-4">
                 <p className="text-[10px] font-bold tracking-[0.14em] text-navy-500 uppercase">Train</p>
@@ -139,6 +162,12 @@ export default function ReviewPage() {
                 <p className="mt-1 inline-block rounded-full bg-cream-100 px-2.5 py-1 text-[11px] font-bold text-navy-700">
                   Class {sel.classCode ?? "—"}
                 </p>
+                {snap.times && (
+                  <p className="mt-1.5 text-[12px] text-navy-600" data-testid="review-times">
+                    Dep {snap.times.departure}
+                    {snap.times.arrival ? ` · Arr ${snap.times.arrival}` : ""}
+                  </p>
+                )}
               </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-cream-200 px-5 py-4 text-[12.5px]">
                 <div className="col-span-2">
@@ -220,11 +249,11 @@ export default function ReviewPage() {
               </p>
             )}
 
-            {ready && !confirmed && (
+            {!confirmed && (
               <button
                 type="button"
                 data-testid="proceed-irctc"
-                disabled={busy}
+                disabled={!ready || busy}
                 onClick={() => void proceed()}
                 className="w-full rounded-2xl bg-navy-900 px-4 py-3.5 text-[14px] font-extrabold text-white transition hover:bg-navy-800 active:scale-[0.99] disabled:opacity-50"
               >

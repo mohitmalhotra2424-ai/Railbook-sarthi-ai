@@ -152,3 +152,15 @@ export function evaluateReadiness(conv: ReadinessInput): ReadinessResult {
     warnings,
   };
 }
+
+/**
+ * Prompt 33: extract provider-reported dep/arr times from a compact result-row
+ * label ("NUM NAME dep HH:MM arr HH:MM"). Returns null when the row carries no
+ * departure time — nothing is invented.
+ */
+export function parseTimesFromLabel(label: string): { departure: string; arrival: string | null } | null {
+  const dep = /(?:^|\s)dep (\d{1,2}:\d{2})(?:\s|$)/.exec(label);
+  if (!dep) return null;
+  const arr = /(?:^|\s)arr (\d{1,2}:\d{2})(?:\s|$)/.exec(label);
+  return { departure: dep[1], arrival: arr ? arr[1] : null };
+}
