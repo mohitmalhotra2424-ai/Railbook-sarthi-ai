@@ -63,22 +63,24 @@ function baseResult(tool: string, meta: ToolExecutionMeta, status: ToolResultSta
 async function withTimeout<T>(promise: Promise<T>, ms: number, signal?: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`TOOL_TIMEOUT after ${ms}ms`)), ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(new Error("ABORTED"));
-      },
-      { once: true },
-    );
+    // Prompt 38: batches call this many times per turn — the listener must be
+    // removed on completion, or every check leaks one onto the turn signal.
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new Error("ABORTED"));
+    };
+    const settle = (fn: () => void) => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      fn();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     promise.then(
       (v) => {
-        clearTimeout(timer);
-        resolve(v);
+        settle(() => resolve(v));
       },
       (e) => {
-        clearTimeout(timer);
-        reject(e);
+        settle(() => reject(e));
       },
     );
   });
@@ -221,29 +223,154 @@ export async function executeTool(
       if (a.maxDurationMinutes !== undefined && (r.durationMin === null || r.durationMin > a.maxDurationMinutes)) return false;
       return true;
     });
-    // availableOnly: only CURRENT recorded live checks — absence or stale data
-    // excludes the train honestly (never presented as available).
-    let noAvailData = 0;
+    // availableOnly — Prompt 38: run REAL provider availability checks across
+    // the current result set (bounded concurrency, existing capability
+    // failover), then keep only trains the provider explicitly confirmed.
+    // Unknown/failed/rate-limited/stale checks are NEVER treated as available
+    // or unavailable — they are counted and disclosed honestly.
+    let availSummary = "";
     if (a.availableOnly) {
+      const cls = (a.classCode ?? conv.selection?.classCode ?? conv.journey.classCode ?? "").trim().toUpperCase();
+      if (!cls) {
+        return {
+          ...baseResult(tool, meta, "error"),
+          note: "Availability check needs a travel class — ask the user which class they want confirmed seats in (e.g. 3A, SL, 2A). Nothing was checked.",
+        };
+      }
+      if (!srcRef.journeyDate || !srcRef.route?.from || !srcRef.route?.to) {
+        return {
+          ...baseResult(tool, meta, "error"),
+          note: "The current search results carry no route/date for a live availability check — re-run SEARCH_TRAINS first. Nothing was checked.",
+        };
+      }
+      // Only trains that RUN in the class are relevant for the check.
+      matched = matched.filter((r) => !r.classes.length || r.classes.some((c) => c.toUpperCase() === cls));
+      type Outcome = "available" | "unavailable" | "unknown";
+      // Real ConfirmTkt/IRCTC vocabulary: AVAILABLE-5 / AVL / AVL 18 / AVLS n
+      // = confirmed seats. Everything else published (WL, GNWL/RLWL/PQWL/TQWL,
+      // RAC, REGRET, NOSB, CAN…) is an explicit "no confirmed seat" state.
+      const classify = (status: string): Outcome => (/^(AVAILABLE|AVL)/i.test(status.trim()) ? "available" : "unavailable");
+      const outcomes = new Map<string, { outcome: Outcome; status?: string; live: boolean }>();
+      const REUSE_MS = 5 * 60_000; // still-valid checks are reused (an explicit refresh always re-checks)
+      const batchForClass = srcRef.availabilityBatch?.find(
+        (b) => b.classCode === cls && Date.now() - new Date(b.checkedAt).getTime() < REUSE_MS,
+      );
+      const pending: string[] = [];
+      for (const r of matched) {
+        let reusedStatus: string | undefined;
+        if (a.refresh !== true) {
+          // 1) this search version's own batch results…
+          reusedStatus = batchForClass?.entries[r.trainNumber];
+          // 2) …or a still-valid individually recorded live check.
+          if (reusedStatus === undefined) {
+            const refs = conv.results.filter(
+              (x) =>
+                x.tool === "CHECK_AVAILABILITY" &&
+                !x.supersededBy &&
+                x.freshness !== "stale" &&
+                x.trainNumber === r.trainNumber &&
+                x.classCode === cls &&
+                x.availability?.length &&
+                x.retrievedAt &&
+                Date.now() - new Date(x.retrievedAt).getTime() < REUSE_MS,
+            );
+            reusedStatus = refs.length ? refs[refs.length - 1].availability!.find((c) => c.classCode === cls)?.status : undefined;
+          }
+        }
+        if (reusedStatus !== undefined) outcomes.set(r.trainNumber, { outcome: classify(reusedStatus), status: reusedStatus, live: false });
+        else pending.push(r.trainNumber);
+      }
+      let providerMissing = false;
+      const liveEntries: Record<string, string> = {};
+      if (pending.length) {
+        const deadline = Date.now() + 45_000; // soft budget; the rest is honestly reported as not verified
+        const LIMIT = 3; // bounded concurrency — never flood the provider
+        let idx = 0;
+        const worker = async (): Promise<void> => {
+          while (idx < pending.length) {
+            const i = idx;
+            idx += 1;
+            const num = pending[i];
+            if (providerMissing || Date.now() > deadline || meta.signal?.aborted) {
+              outcomes.set(num, { outcome: "unknown", live: false });
+              continue;
+            }
+            const reqId = `${meta.turnId}:${meta.toolCallId}:avail-${i}`;
+            try {
+              const env = await withTimeout(
+                executeCapabilityFailover(
+                  "seatAvailability",
+                  (prov) =>
+                    (prov as SeatAvailabilityProvider).availability(
+                      { trainId: num, date: srcRef.journeyDate!, from: srcRef.route!.from!, to: srcRef.route!.to!, classCode: cls },
+                      { locale: "en", requestId: reqId, refresh: a.refresh === true },
+                    ),
+                  reqId,
+                ),
+                TOOL_TIMEOUT_MS,
+                meta.signal,
+              );
+              if (isNotConfigured(env)) {
+                providerMissing = true;
+                outcomes.set(num, { outcome: "unknown", live: false });
+                continue;
+              }
+              const entry =
+                env.errors.length === 0 && env.data
+                  ? env.data.classes.find((c) => c.classCode.toUpperCase() === cls)
+                  : undefined;
+              if (!entry) {
+                // error / rate-limited / class not published — UNKNOWN, never "unavailable"
+                outcomes.set(num, { outcome: "unknown", live: false });
+                continue;
+              }
+              outcomes.set(num, { outcome: classify(entry.status), status: entry.status, live: true });
+              liveEntries[num] = entry.status;
+            } catch {
+              outcomes.set(num, { outcome: "unknown", live: false });
+            }
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(LIMIT, pending.length) }, worker));
+        // Store confirmed outcomes ON the search-version ref (dies with it on
+        // supersede; never bloats the ref list; failures are NOT stored).
+        if (Object.keys(liveEntries).length) {
+          fStore.setAvailabilityBatch(meta.conversationId, srcRef.refId, cls, liveEntries);
+        }
+      }
+      let nAvail = 0;
+      let nUnavail = 0;
+      let nUnknown = 0;
       matched = matched.filter((r) => {
-        const refs = conv.results.filter(
-          (x) =>
-            x.tool === "CHECK_AVAILABILITY" &&
-            !x.supersededBy &&
-            x.freshness !== "stale" &&
-            x.trainNumber === r.trainNumber &&
-            x.availability?.length,
-        );
-        const entry = refs.length
-          ? refs[refs.length - 1].availability!.find((c) => !a.classCode || c.classCode === a.classCode)
-          : undefined;
-        if (!entry) {
-          noAvailData += 1;
+        const o = outcomes.get(r.trainNumber);
+        if (!o || o.outcome === "unknown") {
+          nUnknown += 1;
           return false;
         }
-        r.availabilityStatus = entry;
-        return true;
+        if (o.outcome === "available") {
+          nAvail += 1;
+          r.availabilityStatus = { classCode: cls, status: o.status ?? "AVAILABLE" };
+          return true;
+        }
+        nUnavail += 1;
+        return false;
       });
+      const total = nAvail + nUnavail + nUnknown;
+      const pieces: string[] = [];
+      if (providerMissing) {
+        pieces.push("No live availability provider is configured right now — only previously recorded checks could be used.");
+      }
+      if (nUnknown === 0) {
+        pieces.push(`All ${total} relevant trains verified for ${cls}: ${nAvail} confirmed available, ${nUnavail} unavailable.${nAvail === 0 ? " None has confirmed seats." : ""}`);
+      } else if (nAvail + nUnavail > 0) {
+        pieces.push(`${total} trains checked: ${nAvail} available, ${nUnavail} unavailable, ${nUnknown} could not be verified. Results are partial.`);
+        if (nAvail === 0) {
+          pieces.push(`Among the ${nUnavail} successfully checked trains none has confirmed ${cls} seats — but with ${nUnknown} checks unresolved it CANNOT be concluded that no train is available.`);
+        }
+      } else {
+        pieces.push(`Availability could not be verified for any of the ${total} relevant trains (provider errors, rate limits or timeouts) — nothing is confirmed either way. Do NOT tell the user that no train is available.`);
+      }
+      availSummary = ` ${pieces.join(" ")}`;
     }
     // Fares: only from current, non-superseded GET_FARE results.
     let faresKnown = 0;
@@ -294,15 +421,15 @@ export async function executeTool(
       .join("; ");
     const extras = [
       a.sortBy === "fare" ? `Fare known for ${faresKnown}/${matched.length} (unchecked trains listed last; use GET_FARE to fetch real prices).` : null,
-      a.availableOnly
-        ? `Availability shown only from current recorded live checks${noAvailData ? `; ${noAvailData} matching trains had no recorded availability and were excluded — run CHECK_AVAILABILITY to include them` : ""}.`
-        : null,
+      a.availableOnly ? availSummary.trim() : null,
     ]
       .filter(Boolean)
       .join(" ");
     const note =
       matched.length === 0
-        ? `0 of ${rows.length} current results match (${criteria}). Nothing was weakened or invented — tell the user honestly and suggest ONE sensible adjustment (wider time window, another class, or dropping a filter), then ask.`
+        ? a.availableOnly
+          ? `No train is confirmed available.${availSummary.trim()} Do not claim the list was fully checked unless the counts above say so; suggest a sensible next step (another class, retry later, or checking specific trains).`
+          : `0 of ${rows.length} current results match (${criteria}). Nothing was weakened or invented — tell the user honestly and suggest ONE sensible adjustment (wider time window, another class, or dropping a filter), then ask.`
         : `${matched.length} of ${rows.length} current results match (${criteria}). ${list}${more ? ` (+${more} more matching — the user can select any by train number)` : ""} ${extras} Selection still validates against the FULL authoritative search results.`;
     const data = matched.map((r) => ({
       trainNumber: r.trainNumber,

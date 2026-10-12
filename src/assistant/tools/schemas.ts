@@ -116,7 +116,11 @@ export const FilterTrainsArgs = z
     availableOnly: z
       .boolean()
       .optional()
-      .describe("Keep only trains with a CURRENT recorded live availability check (for classCode when given). Uses only recorded authoritative checks — never invents availability."),
+      .describe("Run REAL live provider availability checks across the current result set (bounded batch, recorded still-valid checks reused) and keep ONLY trains whose seats in the class are confirmed available. Requires a class — from classCode, the current selection or journey context; if no class is known, ASK the user which class instead of calling. Unknown/failed checks are reported honestly, never shown as available."),
+    refresh: z
+      .boolean()
+      .optional()
+      .describe("True when the user explicitly asks to re-check live availability right now (bypasses still-valid recorded checks)."),
     departsAfter: hhmm("Departure at/after this time — for DEPARTURE-time preferences."),
     departsBefore: hhmm("Departure at/before this time."),
     arrivesAfter: hhmm("Arrival at/after this time."),
@@ -371,12 +375,13 @@ export const TOOL_DEFINITIONS: ChatToolDef[] = [
     function: {
       name: "FILTER_TRAINS",
       description:
-        "Filter and/or sort the CURRENT search results in the session (no new provider search) for requests like 'sirf 3A', 'subah pahunchne wali', 'sabse sasti', 'sabse jaldi pahunchne wali'. Translate the user's natural words into explicit arguments — do NOT hard-code phrases: classCode for a class ('AC wali' alone is ambiguous — ask which AC class unless the user already said one); departsAfter/departsBefore for DEPARTURE preferences; arrivesAfter/arrivesBefore for ARRIVAL deadlines ('subah pahunchna hai' → arrivesBefore '12:00'); maxDurationMinutes and/or sortBy 'duration' for fastest; sortBy 'fare' for cheapest (only fares already checked with GET_FARE are ranked — check fares first when prices matter); availableOnly only reflects recorded live availability checks. Documented time-of-day convention: morning 04:00–11:59, afternoon 12:00–16:59, evening 17:00–20:59, night 21:00–03:59. Compatible filters combine. The backend never invents fares, availability or trains; when nothing matches it says so.",
+        "Filter and/or sort the CURRENT search results in the session (no new provider search) for requests like 'sirf 3A', 'subah pahunchne wali', 'sabse sasti', 'sabse jaldi pahunchne wali'. Translate the user's natural words into explicit arguments — do NOT hard-code phrases: classCode for a class ('AC wali' alone is ambiguous — ask which AC class unless the user already said one); departsAfter/departsBefore for DEPARTURE preferences; arrivesAfter/arrivesBefore for ARRIVAL deadlines ('subah pahunchna hai' → arrivesBefore '12:00'); maxDurationMinutes and/or sortBy 'duration' for fastest; sortBy 'fare' for cheapest (only fares already checked with GET_FARE are ranked — check fares first when prices matter); availableOnly runs REAL live provider checks across the current results (never invents availability) and requires a class — if the user has not stated one and none is selected, ask which class first. Documented time-of-day convention: morning 04:00–11:59, afternoon 12:00–16:59, evening 17:00–20:59, night 21:00–03:59. Compatible filters combine. The backend never invents fares, availability or trains; when nothing matches it says so.",
       parameters: {
         type: "object",
         properties: {
           classCode: str("Class the train must run in, e.g. '3A', 'SL', '2A'"),
-          availableOnly: { type: "boolean", description: "Only trains with a current recorded live availability check" },
+          availableOnly: { type: "boolean", description: "Check live provider availability for every relevant train in the current results and keep only confirmed-available ones (requires a known class — otherwise ask)" },
+          refresh: { type: "boolean", description: "User explicitly asked to re-check live availability now" },
           departsAfter: str("Departure at/after HH:MM"),
           departsBefore: str("Departure at/before HH:MM"),
           arrivesAfter: str("Arrival at/after HH:MM"),

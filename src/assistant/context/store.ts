@@ -41,6 +41,11 @@ export interface ResultRef {
   fare?: { classCode: string; totalFare: number; currency: string };
   /** Prompt 33: provider-returned per-class availability (CHECK_AVAILABILITY ok). */
   availability?: { classCode: string; status: string }[];
+  /** Prompt 38: batch live-availability outcomes for THIS search version,
+   *  per class: trainNumber → provider status (only provider-confirmed ok
+   *  responses; errors/timeouts are never stored as facts). Dies with the
+   *  ref when the search is superseded. */
+  availabilityBatch?: { classCode: string; checkedAt: string; entries: Record<string, string> }[];
   supersededBy?: string;
   supersededReason?: string;
 }
@@ -281,6 +286,24 @@ export class ConversationStore {
     }
     conv.updatedAt = new Date().toISOString();
     return ref;
+  }
+
+  /** Prompt 38: attach batch live-availability outcomes to a specific result
+   *  ref (the search version they were checked against). Mutates the store's
+   *  own ref — callers only ever hold clones. Failures are never passed in. */
+  setAvailabilityBatch(conversationId: string, refId: string, classCode: string, entries: Record<string, string>): void {
+    const conv = this.conversations.get(conversationId);
+    const ref = conv?.results.find((r) => r.refId === refId);
+    if (!conv || !ref) return;
+    const batches = (ref.availabilityBatch ??= []);
+    const existing = batches.find((b) => b.classCode === classCode);
+    if (existing) {
+      existing.checkedAt = new Date().toISOString();
+      Object.assign(existing.entries, entries);
+    } else {
+      batches.push({ classCode, checkedAt: new Date().toISOString(), entries: { ...entries } });
+    }
+    conv.updatedAt = new Date().toISOString();
   }
 
   /** The compact context block the LLM sees every turn (bounded size). */

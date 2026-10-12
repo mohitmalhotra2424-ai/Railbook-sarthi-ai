@@ -247,7 +247,7 @@ it("availableOnly uses only CURRENT recorded live checks — stale or missing da
     "t-av1",
     "CHECK_AVAILABILITY",
     { trainNumber: "91005", classCode: "3A", from: "LDH", to: "NDLS", date: "2026-10-12" },
-    toolResult("CHECK_AVAILABILITY", { data: { classes: [{ classCode: "3A", status: "AVAILABLE-5" }] } }),
+    toolResult("CHECK_AVAILABILITY", { retrievedAt: new Date().toISOString(), data: { classes: [{ classCode: "3A", status: "AVAILABLE-5" }] } }),
   );
   store.beginTurn("p37-5", "t-av2", "availability stale");
   store.recordToolResult(
@@ -255,7 +255,7 @@ it("availableOnly uses only CURRENT recorded live checks — stale or missing da
     "t-av2",
     "CHECK_AVAILABILITY",
     { trainNumber: "91009", classCode: "3A", from: "LDH", to: "NDLS", date: "2026-10-12" },
-    toolResult("CHECK_AVAILABILITY", { freshness: "stale", data: { classes: [{ classCode: "3A", status: "AVAILABLE-2" }] } }),
+    toolResult("CHECK_AVAILABILITY", { retrievedAt: new Date().toISOString(), freshness: "stale", data: { classes: [{ classCode: "3A", status: "AVAILABLE-2" }] } }),
   );
   const ev = await filterTurn(store, "p37-5", { classCode: "3A", availableOnly: true });
   const cards = cardsOf(ev);
