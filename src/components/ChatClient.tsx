@@ -271,13 +271,13 @@ export function ChatClient({ initialMessage, passengerConversationId, onPassenge
   // Browsers may still block playback after an asynchronous reply; keep
   // the explicit replay button and error handling as the fallback.
   useEffect(() => {
-    if (!autoSpeak || busy || !speak.supported) return;
+    if (!autoSpeak || busy || !speak.supported || voice.state === "recording" || voice.state === "processing") return;
     const last = [...messages].reverse().find((m) => m.role === "assistant" && m.text);
     if (last && last.id !== lastAutoSpokenRef.current) {
       lastAutoSpokenRef.current = last.id;
       speak.speak(last.id, speechSummary(last));
     }
-  }, [autoSpeak, busy, messages, speak]);
+  }, [autoSpeak, busy, messages, speak, voice.state]);
 
   // Handoff from home (?q=): perform the real turn once, then clean the URL so
   // a refresh never re-sends the message.

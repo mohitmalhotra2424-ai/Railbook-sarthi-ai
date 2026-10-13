@@ -38,5 +38,5 @@ export function speechSummary(m: SpeakableMessage): string {
       );
     }
   }
-  return bits.join(" ").slice(0, 1200);
+  return bits.join(" ");
 }

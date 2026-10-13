@@ -19,7 +19,8 @@ export async function GET(): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   const body = (await request.json().catch(() => null)) as { text?: unknown } | null;
-  const text = typeof body?.text === "string" ? body.text.slice(0, 1500) : "";
+  const text = typeof body?.text === "string" ? body.text : "";
+  if (text.length > 1500) return badRequest("Speech text exceeds 1500 characters; use sequential chunks.");
   if (!text.trim()) return badRequest("text is required.");
 
   const result = await synthesizeSpeech(text);

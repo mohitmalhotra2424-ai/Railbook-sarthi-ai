@@ -446,6 +446,17 @@ export class ConversationStore {
     return { ok: true, passengers: conv.passengers };
   }
 
+  removePassenger(id: string, index: number): { ok: true; passengers: PassengerDraft[] } | { ok: false; error: string } {
+    const conv = this.get(id);
+    if (!conv?.selection?.classCode || !Number.isInteger(index) || index < 1 || index > conv.passengers.length) {
+      return { ok: false, error: "Select an existing passenger to remove." };
+    }
+    conv.passengers.splice(index - 1, 1);
+    conv.review = undefined;
+    conv.updatedAt = new Date().toISOString();
+    return { ok: true, passengers: conv.passengers };
+  }
+
   addPassenger(
     id: string,
     category?: PassengerCategory,

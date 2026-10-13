@@ -45,7 +45,9 @@ export default function ReviewPage() {
     } catch {
       /* private mode */
     }
-    setConversationId(cid);
+    // Defer browser-storage hydration and cancel it on unmount.
+    const timer = window.setTimeout(() => setConversationId(cid), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const load = useCallback(async () => {
@@ -60,7 +62,8 @@ export default function ReviewPage() {
   }, [conversationId]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   const proceed = async () => {

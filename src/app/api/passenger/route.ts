@@ -104,6 +104,13 @@ export async function POST(request: Request): Promise<Response> {
     return jsonResponse({ ok: true, selection: after?.selection ?? null, passengers: after?.passengers ?? [], review: res.review, readiness, handoff: IRCTC_HANDOFF_READY });
   }
 
+  if (body?.action === "remove") {
+    const res = conversationStore.removePassenger(conversationId, typeof body.passengerIndex === "number" ? body.passengerIndex : NaN);
+    if (!res.ok) return jsonResponse({ ok: false, error: res.error }, { status: 400 });
+    const conv = conversationStore.get(conversationId);
+    return jsonResponse({ ok: true, selection: conv?.selection ?? null, passengers: res.passengers, review: null, readiness: conv ? evaluateReadiness(conv) : null });
+  }
+
   if (body?.action === "add") {
     if (body.category !== undefined && !validateCategory(body.category).ok) return badRequest("Invalid passenger category.");
     const res = conversationStore.addPassenger(

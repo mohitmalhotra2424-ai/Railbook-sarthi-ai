@@ -18,6 +18,8 @@ export function detectTtsLanguage(text: string): "hi-IN" | "en-IN" {
  * factually.
  */
 export function speakableText(text: string): string {
+  // Standalone structured payloads are not conversational responses.
+  try { const value: unknown = JSON.parse(text); if (value !== null && typeof value === "object") return ""; } catch { /* normal prose */ }
   return text
     .replace(/```[\s\S]*?```/g, " ") // fenced code blocks (never read aloud)
     .replace(/\[([^\]]*)\]\(([^)]*)\)/g, " $1 ") // [label](url) → label
@@ -25,6 +27,7 @@ export function speakableText(text: string): string {
     .replace(/₹/g, " rupees ")
     .replace(/[•·]/g, ", ")
     .replace(/[*_#`>~]/g, " ") // markdown emphasis/bullets/quotes
+    .replace(/^[ \t]*[-+]\s+/gm, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -35,7 +38,7 @@ export function speakableText(text: string): string {
  * that some engines truncate). Meaning and order are preserved exactly.
  */
 export function spokenSentences(text: string, maxLen = 220): string[] {
-  const parts = text.match(/[^。.!?\n]+[。.!?]*/g) ?? [text];
+  const parts = text.split(/(?<=[!?।。])\s*|(?<=\.)\s+(?=\D)/u);
   const chunks: string[] = [];
   let current = "";
   for (const raw of parts) {

@@ -118,12 +118,26 @@ export function useSpeak(opts: { onEnd?: () => void } = {}): SpeakApi {
     cleanupPlayback();
   }, [cleanupPlayback]);
 
+  useEffect(() => {
+    window.addEventListener("railsaarthi:listen-start", stop);
+    const other = (event: Event) => {
+      if ((event as CustomEvent).detail !== genRef) stop();
+    };
+    window.addEventListener("railsaarthi:speak-start", other);
+    return () => {
+      window.removeEventListener("railsaarthi:listen-start", stop);
+      window.removeEventListener("railsaarthi:speak-start", other);
+    };
+  }, [stop]);
+
   /** Browser fallback: same language-matched voice as before, but the text is
    *  spoken in sentence-sized chunks queued sequentially, so segmentation is
    *  natural and an interrupt/stop cannot leave orphaned audio. Every handler
    *  is generation-guarded: an obsolete turn is discarded mid-chain. */
   const speakLocal = useCallback((id: string, clean: string, gen: number) => {
     if (typeof window === "undefined" || typeof window.speechSynthesis?.speak !== "function") {
+      speakingIdRef.current = null;
+      setSpeakingId(null);
       setError("Audio playback available nahi hai.");
       return;
     }
@@ -194,8 +208,10 @@ export function useSpeak(opts: { onEnd?: () => void } = {}): SpeakApi {
 
   const speak = useCallback(
     (id: string, text: string) => {
+      if (speakingIdRef.current === id) return;
       const clean = speakableText(text);
       if (!clean) return;
+      window.dispatchEvent(new CustomEvent("railsaarthi:speak-start", { detail: genRef }));
       genRef.current += 1;
       const gen = genRef.current;
       cleanupPlayback();
@@ -203,6 +219,15 @@ export function useSpeak(opts: { onEnd?: () => void } = {}): SpeakApi {
       setSpeakingId(id);
       setError(null);
 
+      // No silent server truncation. Full long responses use browser chunks.
+      if (clean.length > 1500) { speakLocal(id, clean, gen); return; }
+      let fellBack = false;
+      const fallback = () => {
+        if (genRef.current !== gen || fellBack) return;
+        fellBack = true;
+        cleanupPlayback();
+        speakLocal(id, clean, gen);
+      };
       const ctrl = new AbortController();
       fetchCtrlRef.current = ctrl;
       fetch("/api/voice/speech", {
@@ -219,6 +244,7 @@ export function useSpeak(opts: { onEnd?: () => void } = {}): SpeakApi {
         })
         .then((blob) => {
           if (genRef.current !== gen || !blob) return; // obsolete — never overtake
+          if (!blob.size) { fallback(); return; }
           const url = URL.createObjectURL(blob);
           objectUrlRef.current = url;
           const audio = new Audio(url);
@@ -233,15 +259,15 @@ export function useSpeak(opts: { onEnd?: () => void } = {}): SpeakApi {
           audio.onerror = () => {
             if (genRef.current !== gen) return;
             // server audio unusable — browser fallback for this same turn
-            speakLocal(id, clean, gen);
+            fallback();
           };
           void audio.play().catch(() => {
-            if (genRef.current === gen) speakLocal(id, clean, gen);
+            if (genRef.current === gen) fallback();
           });
         })
         .catch(() => {
           if (genRef.current !== gen) return; // superseded — no duplicate playback
-          speakLocal(id, clean, gen);
+          fallback();
         });
     },
     [cleanupPlayback, speakLocal],

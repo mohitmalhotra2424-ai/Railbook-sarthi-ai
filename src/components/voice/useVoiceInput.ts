@@ -98,8 +98,10 @@ export function useVoiceInput(opts: {
   }, [onTranscript]);
 
   const cancel = useCallback(() => {
-    recRef.current?.abort();
+    const active = recRef.current;
     recRef.current = null;
+    active?.abort();
+    window.dispatchEvent(new Event("railsaarthi:listen-end"));
     setState("idle");
   }, []);
 
@@ -118,7 +120,9 @@ export function useVoiceInput(opts: {
     rec.lang = langRef.current;
     rec.interimResults = false;
     rec.continuous = false;
+    let delivered = false;
     rec.onresult = (event) => {
+      if (recRef.current !== rec || delivered) return;
       let finalText = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
@@ -126,11 +130,14 @@ export function useVoiceInput(opts: {
       }
       const trimmed = finalText.trim();
       if (trimmed) {
+        delivered = true;
         setState("processing"); // transcript received — handing it to the composer
         onTranscriptRef.current(trimmed);
       }
     };
     rec.onerror = (event) => {
+      if (recRef.current !== rec) return;
+      window.dispatchEvent(new Event("railsaarthi:listen-end"));
       recRef.current = null; // release the instance so the mic works again (onend may follow)
       const msg = ERROR_MESSAGES[event.error] ?? null;
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
@@ -145,21 +152,29 @@ export function useVoiceInput(opts: {
       }
     };
     rec.onend = () => {
+      if (recRef.current !== rec) return;
+      window.dispatchEvent(new Event("railsaarthi:listen-end"));
       recRef.current = null;
       setState((s) => (s === "recording" || s === "processing" ? "idle" : s));
     };
     recRef.current = rec;
     setState("recording");
     try {
+      window.dispatchEvent(new Event("railsaarthi:listen-start"));
       rec.start(); // permission prompt happens here — only after this user tap
     } catch {
+      window.dispatchEvent(new Event("railsaarthi:listen-end"));
       recRef.current = null;
       setState("error");
       setMessage("Recording start nahi ho payi.");
     }
   }, []);
 
-  useEffect(() => () => recRef.current?.abort(), []);
+  useEffect(() => {
+    const abort = () => { const active = recRef.current; recRef.current = null; active?.abort(); window.dispatchEvent(new Event("railsaarthi:listen-end")); };
+    window.addEventListener("railsaarthi:speak-start", cancel);
+    return () => { window.removeEventListener("railsaarthi:speak-start", cancel); abort(); };
+  }, [cancel]);
 
   return { supported, state, message, start, cancel, dismissMessage: () => setMessage(null) };
 }
